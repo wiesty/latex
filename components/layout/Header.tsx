@@ -9,6 +9,7 @@ import {
   PanelRight,
   PanelRightClose,
   Loader2,
+  Download,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
@@ -152,6 +153,23 @@ export default function Header() {
 
       {/* Right */}
       <div className="flex items-center gap-1">
+        <button
+          onClick={() => {
+            if (!activeProject) return;
+            const url = `/api/projects/export?path=${encodeURIComponent(activeProject.path)}`;
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${activeProject.name}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }}
+          disabled={!activeProject}
+          className="rounded p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Export project as ZIP"
+        >
+          <Download className="h-4 w-4 text-neutral-500" />
+        </button>
         <button
           onClick={togglePDF}
           className="rounded p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800"

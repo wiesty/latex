@@ -57,11 +57,12 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "path is required" }, { status: 400 });
   }
 
-  // Only allow deleting .tex and .bib files
+  // Only allow deleting recognized file types
   const ext = path.extname(filePath).toLowerCase();
-  if (![".tex", ".bib", ".sty", ".cls", ".bst"].includes(ext)) {
+  const allowedExtensions = [".tex", ".bib", ".sty", ".cls", ".bst", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".eps", ".pdf", ".tikz", ".pgf", ".csv", ".dat", ".txt", ".md"];
+  if (!allowedExtensions.includes(ext)) {
     return NextResponse.json(
-      { error: "Only .tex, .bib, .sty, .cls and .bst files can be deleted" },
+      { error: `File type ${ext} cannot be deleted` },
       { status: 400 }
     );
   }

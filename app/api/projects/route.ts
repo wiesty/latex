@@ -136,7 +136,7 @@ async function buildFileTree(
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   const result: FileEntry[] = [];
 
-  const allowedExtensions = [".tex", ".bib", ".sty", ".cls", ".bst"];
+  const allowedExtensions = [".tex", ".bib", ".sty", ".cls", ".bst", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".eps", ".pdf", ".tikz", ".pgf", ".csv", ".dat", ".txt", ".md"];
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);

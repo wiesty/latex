@@ -11,8 +11,10 @@ import {
   Trash2,
   PanelLeftClose,
   PanelLeft,
+  Upload,
+  Image,
 } from "lucide-react";
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import { toast } from "sonner";
 
 export default function FileTree() {
@@ -22,6 +24,10 @@ export default function FileTree() {
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileName, setNewFileName] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
 
   const refreshFiles = useCallback(() => setRefreshTick((t) => t + 1), []);
 
@@ -84,6 +90,84 @@ export default function FileTree() {
     }
   };
 
+  const uploadFiles = async (fileList: FileList | File[]) => {
+    if (!activeProject) return;
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("projectPath", activeProject.path);
+      for (const file of files) {
+        formData.append("files", file);
+      }
+      const res = await fetch("/api/files/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+      const failed = data.results?.filter((r: { success: boolean }) => !r.success) || [];
+      if (failed.length > 0) {
+        for (const f of failed) {
+          toast.error(`${f.name}: ${f.error}`);
+        }
+      }
+      if (data.successCount > 0) {
+        toast.success(`${data.successCount} Datei(en) hochgeladen`);
+      }
+      refreshFiles();
+    } catch {
+      toast.error("Upload fehlgeschlagen");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+    if (e.dataTransfer.files.length > 0) {
+      uploadFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      uploadFiles(e.target.files);
+      e.target.value = "";
+    }
+  };
+
   if (!showFileTree) {
     return (
       <button
@@ -97,13 +181,39 @@ export default function FileTree() {
   }
 
   return (
-    <div className="flex h-full w-50 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+    <div
+      className={`flex h-full w-50 flex-col border-r border-neutral-200 bg-white transition-colors dark:border-neutral-800 dark:bg-neutral-950 ${
+        isDragging ? "ring-2 ring-inset ring-blue-500 bg-blue-50/50 dark:bg-blue-950/20" : ""
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileInputChange}
+        accept=".tex,.bib,.sty,.cls,.bst,.png,.jpg,.jpeg,.gif,.svg,.eps,.pdf,.tikz,.pgf,.csv,.dat,.txt,.md"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
         <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
           Files
         </span>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => activeProject && fileInputRef.current?.click()}
+            disabled={!activeProject || isUploading}
+            className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30"
+            title={activeProject ? "Upload files" : "Select a project first"}
+          >
+            <Upload className="h-3.5 w-3.5 text-neutral-500" />
+          </button>
           <button
             onClick={() => activeProject && setShowNewFile(true)}
             disabled={!activeProject}
@@ -148,6 +258,19 @@ export default function FileTree() {
         {!activeProject && (
           <div className="px-3 py-4 text-center text-xs text-neutral-400">
             Select a project
+          </div>
+        )}
+        {isDragging && activeProject && (
+          <div className="mx-2 my-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-blue-400 bg-blue-50/50 py-6 dark:border-blue-600 dark:bg-blue-950/20">
+            <Upload className="mb-1 h-5 w-5 text-blue-500" />
+            <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
+              Dateien hier ablegen
+            </span>
+          </div>
+        )}
+        {isUploading && (
+          <div className="px-3 py-2 text-center text-[10px] text-neutral-400">
+            Uploading...
           </div>
         )}
         {files.map((entry) => (
@@ -214,6 +337,8 @@ function FileEntryItem({
   }
 
   const isActive = activeFilePath === entry.path;
+  const ext = entry.name.split(".").pop()?.toLowerCase() || "";
+  const isImage = ["png", "jpg", "jpeg", "gif", "svg", "eps"].includes(ext);
 
   return (
     <div
@@ -230,7 +355,11 @@ function FileEntryItem({
       }`}
       style={{ paddingLeft: `${depth * 12 + 20}px` }}
     >
-      <File className="h-3.5 w-3.5 shrink-0" />
+      {isImage ? (
+        <Image className="h-3.5 w-3.5 shrink-0 text-green-500" />
+      ) : (
+        <File className="h-3.5 w-3.5 shrink-0" />
+      )}
       <span className="flex-1 truncate">{entry.name}</span>
       <button
         onClick={(e) => onDelete(e, entry.path, entry.name)}
