@@ -1,6 +1,6 @@
 # Wiesty's LaTeX Editor
 
-A self-hosted, browser-based LaTeX editor with live compilation and PDF preview — powered by Next.js and Monaco Editor. Run it anywhere via Docker.
+A self-hosted, browser-based LaTeX editor with live compilation and PDF preview — powered by Next.js and Monaco Editor. Run it on your local machine with docker. 
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -12,24 +12,22 @@ A self-hosted, browser-based LaTeX editor with live compilation and PDF preview 
 - **Multi-Project Support** — manage multiple LaTeX projects simultaneously
 - **Dark / Light Theme** — toggle between themes with one click
 - **Docker Ready** — single container with TeX Live included, works on Windows, macOS, and Linux
-- **Auto-Import Projects** — map a single folder and subfolders are auto-discovered as projects
+- **Auto-Import Projects** — map a folder and every subfolder is auto-discovered as a project
+
+---
 
 ## Quick Start with Docker
 
 ### Docker Compose (recommended)
-
-Create a `docker-compose.yml`:
 
 ```yaml
 services:
   latex-editor:
     image: ghcr.io/wiesty/latex-editor:latest
     ports:
-      - "3000:3000"
+      - "3107:3107"
     volumes:
-      # Map your projects folder — each subfolder becomes a project
       - ./projects:/projects
-      # Persist editor config
       - latex-config:/data/config
 
 volumes:
@@ -40,60 +38,55 @@ volumes:
 docker compose up -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3107](http://localhost:3107).
 
 ### Docker Run
 
 ```bash
 docker run -d \
-  -p 3000:3000 \
+  -p 3107:3107 \
   -v /path/to/my-projects:/projects \
   ghcr.io/wiesty/latex-editor:latest
 ```
 
-## Project Folder Structure
+---
 
-Each project is a single folder containing your `.tex`, `.bib`, `.sty`, `.cls`, and `.bst` files. Compiled output (PDF, logs, aux files) is written to the same folder.
+## Why the volume mounts?
 
-```
-projects/               ← mounted volume
-├── my-thesis/          ← auto-discovered as project
-│   ├── main.tex
-│   ├── references.bib
-│   ├── chapters/
-│   │   ├── introduction.tex
-│   │   └── methodology.tex
-│   ├── main.pdf        ← generated
-│   └── main.log        ← generated
-└── my-paper/           ← auto-discovered as project
-    ├── main.tex
-    └── main.pdf        ← generated
-```
+The Docker image ships as a fully self-contained, read-only build. Everything the app needs to run is baked in — Node.js, the compiled Next.js bundle, and a full TeX Live installation. Nothing is written inside the container itself.
 
-## Configuration
+That means any data that should **persist across restarts or survive an image update** must live outside the container, which is what the two mounts are for:
 
-### Environment Variables
+### `/projects`
 
-| Variable | Description | Default |
+Your LaTeX source files live outside the container so you can:
+
+- Edit them with any local tool (VS Code, git, Finder, …) without going through the editor UI
+- Keep them under version control
+- Back them up independently of the container lifecycle
+- Upgrade or replace the container image without losing a single `.tex` file
+
+Every direct subfolder of the mapped path is automatically discovered as a project — no manual registration needed.
+
+### `/data/config` (named volume)
+
+Stores editor state that should survive a container restart: the project list and any persisted settings. Using a named Docker volume instead of a bind-mount here means Docker manages the lifecycle — no leftover config files to clean up on the host.
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
 |---|---|---|
-| `LATEX_PROJECTS_DIR` | Root directory for projects — each subfolder is auto-discovered | — |
-| `LATEX_CONFIG_DIR` | Directory for editor config (project list) | `~/.latex-editor` |
+| `LATEX_PROJECTS_DIR` | `/projects` | Root directory scanned for projects |
+| `LATEX_CONFIG_DIR` | `/data/config` | Directory for persisted editor config |
+| `PORT` | `3107` | HTTP port the server listens on |
 
-### Adding Projects
-
-Projects can be added in two ways:
-
-1. **Folder structure** — Place a subfolder inside the `LATEX_PROJECTS_DIR` directory and it is automatically discovered as a project.
-2. **UI** — Click the **+** button in the project sidebar and enter the absolute path to a project folder.
+---
 
 ## Local Development
 
-### Prerequisites
-
-- Node.js 20+
-- pdflatex (via [TeX Live](https://tug.org/texlive/) or [MacTeX](https://tug.org/mactex/))
-
-### Setup
+**Prerequisites:** Node.js 20+, `pdflatex` (TeX Live / MacTeX)
 
 ```bash
 git clone https://github.com/wiesty/latex-editor.git
@@ -102,7 +95,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3107](http://localhost:3107).
+
+---
 
 ## Keyboard Shortcuts
 
@@ -113,6 +108,8 @@ Open [http://localhost:3000](http://localhost:3000).
 | `Ctrl/Cmd + +` | Zoom in PDF |
 | `Ctrl/Cmd + -` | Zoom out PDF |
 
+---
+
 ## Tech Stack
 
 - **Framework:** Next.js 16 (App Router)
@@ -120,8 +117,4 @@ Open [http://localhost:3000](http://localhost:3000).
 - **State Management:** Zustand
 - **Styling:** Tailwind CSS 4
 - **LaTeX Engine:** pdflatex (TeX Live)
-- **Containerization:** Docker (Alpine + TeX Live)
-
-## License
-
-MIT
+- **Containerization:** Docker multi-stage build (Alpine + TeX Live, production-only)

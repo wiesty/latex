@@ -4,7 +4,7 @@ services:
     # Or build locally:
     # build: .
     ports:
-      - "3000:3000"
+      - "3107:3107"
     volumes:
       # Map your projects folder — each subfolder becomes a project
       - ./projects:/projects

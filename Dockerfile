@@ -26,7 +26,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV LATEX_CONFIG_DIR=/data/config
 ENV LATEX_PROJECTS_DIR=/projects
-ENV PORT=3000
+ENV PORT=3107
 ENV HOSTNAME=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs && \
@@ -42,6 +42,6 @@ RUN mkdir -p /data/config /projects && chown nextjs:nodejs /data/config /project
 
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 3107
 
 CMD ["node", "server.js"]
