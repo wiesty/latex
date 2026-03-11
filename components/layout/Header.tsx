@@ -30,6 +30,10 @@ export default function Header() {
     togglePDF,
     fileContent,
     markFileSaved,
+    autoCompile,
+    setAutoCompile,
+    autoScroll,
+    setAutoScroll,
   } = useEditorStore();
   const { setTheme, resolvedTheme } = useTheme();
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
@@ -155,6 +159,44 @@ export default function Header() {
           )}
           {compileStatus === "compiling" ? "Compiling..." : "Compile"}
         </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            role="switch"
+            aria-checked={autoCompile}
+            onClick={() => setAutoCompile(!autoCompile)}
+            disabled={!activeProject}
+            title={autoCompile ? "Auto compile on (click to disable)" : "Auto compile off (click to enable)"}
+            className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 ${
+              autoCompile ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                autoCompile ? "translate-x-3.5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className="text-xs text-neutral-400">Auto</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            role="switch"
+            aria-checked={autoScroll}
+            onClick={() => setAutoScroll(!autoScroll)}
+            disabled={!activeProject}
+            title={autoScroll ? "Auto scroll on (click to disable)" : "Auto scroll off (click to enable)"}
+            className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 ${
+              autoScroll ? "bg-blue-500" : "bg-neutral-300 dark:bg-neutral-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                autoScroll ? "translate-x-3.5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className="text-xs text-neutral-400">Scroll</span>
+        </div>
       </div>
 
       {/* Right */}

@@ -20,6 +20,8 @@ export default function MonacoEditor() {
     markFileUnsaved,
     markFileSaved,
     setCursorPosition,
+    setCurrentPDFPage,
+    autoScroll,
     editorFontSize,
     showMinimap,
     wordWrap,
@@ -34,6 +36,16 @@ export default function MonacoEditor() {
   const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null);
   const fetchingRef = useRef<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncScrollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeProjectRef = useRef(activeProject);
+  const activeFileRef = useRef(activeFile);
+  const mainFileRef = useRef(mainFile);
+  const autoScrollRef = useRef(autoScroll);
+
+  useEffect(() => { activeProjectRef.current = activeProject; }, [activeProject]);
+  useEffect(() => { activeFileRef.current = activeFile; }, [activeFile]);
+  useEffect(() => { mainFileRef.current = mainFile; }, [mainFile]);
+  useEffect(() => { autoScrollRef.current = autoScroll; }, [autoScroll]);
 
   const isLoading = !!(activeFile && fileContent[activeFile.path] === undefined);
 
@@ -161,9 +173,27 @@ export default function MonacoEditor() {
         },
       });
 
-      // Cursor position tracking
+      // Cursor position tracking + debounced SyncTeX scroll
       editor.onDidChangeCursorPosition((e) => {
         setCursorPosition(e.position.lineNumber, e.position.column);
+
+        const proj = activeProjectRef.current;
+        const file = activeFileRef.current;
+        if (!proj || !file?.name.endsWith(".tex") || !autoScrollRef.current) return;
+
+        if (syncScrollRef.current) clearTimeout(syncScrollRef.current);
+        syncScrollRef.current = setTimeout(async () => {
+          const mf = mainFileRef.current ?? "main.tex";
+          try {
+            const res = await fetch(
+              `/api/synctex?projectPath=${encodeURIComponent(proj.path)}&mainFile=${encodeURIComponent(mf)}&texFile=${encodeURIComponent(file.name)}&line=${e.position.lineNumber}`
+            );
+            const data = await res.json();
+            if (data.page) setCurrentPDFPage(data.page);
+          } catch {
+            // silently ignore synctex errors
+          }
+        }, 400);
       });
     },
     [handleSaveAndCompile, setCursorPosition]
@@ -208,10 +238,11 @@ export default function MonacoEditor() {
     monaco.editor.setModelMarkers(model, "latex", markers);
   }, [parsedErrors, activeFile]);
 
-  // Clean up debounce
+  // Clean up debounces
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (syncScrollRef.current) clearTimeout(syncScrollRef.current);
     };
   }, []);
 

@@ -14,7 +14,7 @@ export async function compileLatex(
   const mainBaseName = mainFile.replace(/\.tex$/, "");
   const start = Date.now();
 
-  const pdflatexCmd = `pdflatex -interaction=nonstopmode "${path.join(projectPath, mainFile)}"`;
+  const pdflatexCmd = `pdflatex -interaction=nonstopmode -synctex=1 "${path.join(projectPath, mainFile)}"`;
   const bibtexCmd = `bibtex "${mainBaseName}"`;
 
   try {

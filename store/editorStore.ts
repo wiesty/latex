@@ -65,6 +65,10 @@ interface EditorStore {
   toggleMinimap: () => void;
   wordWrap: boolean;
   toggleWordWrap: () => void;
+  autoCompile: boolean;
+  setAutoCompile: (v: boolean) => void;
+  autoScroll: boolean;
+  setAutoScroll: (v: boolean) => void;
 
   // Cursor
   cursorLine: number;
@@ -187,6 +191,20 @@ export const useEditorStore = create<EditorStore>((set) => ({
   toggleMinimap: () => set((s) => ({ showMinimap: !s.showMinimap })),
   wordWrap: true,
   toggleWordWrap: () => set((s) => ({ wordWrap: !s.wordWrap })),
+  autoCompile: typeof window !== "undefined"
+    ? localStorage.getItem("autoCompile") !== "false"
+    : true,
+  setAutoCompile: (v) => {
+    if (typeof window !== "undefined") localStorage.setItem("autoCompile", String(v));
+    set({ autoCompile: v });
+  },
+  autoScroll: typeof window !== "undefined"
+    ? localStorage.getItem("autoScroll") !== "false"
+    : true,
+  setAutoScroll: (v) => {
+    if (typeof window !== "undefined") localStorage.setItem("autoScroll", String(v));
+    set({ autoScroll: v });
+  },
 
   // Cursor
   cursorLine: 1,

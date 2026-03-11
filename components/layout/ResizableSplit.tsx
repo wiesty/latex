@@ -25,6 +25,7 @@ export default function ResizableSplit({
   // useLayoutEffect applies the persisted value before the browser paints (no flash).
   const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
   const isDragging = useRef(false);
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -39,6 +40,7 @@ export default function ResizableSplit({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDragging.current = true;
+    setIsDraggingState(true);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }, []);
@@ -58,6 +60,7 @@ export default function ResizableSplit({
     const handleMouseUp = () => {
       if (isDragging.current) {
         isDragging.current = false;
+        setIsDraggingState(false);
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
         localStorage.setItem(storageKey, leftWidth.toString());
@@ -92,10 +95,13 @@ export default function ResizableSplit({
         <div className="h-8 w-0.5 rounded-full bg-neutral-300 transition-colors group-hover:bg-blue-500 dark:bg-neutral-700" />
       </div>
       <div
-        className="h-full overflow-hidden"
+        className="relative h-full overflow-hidden"
         style={{ width: `${100 - leftWidth}%` }}
       >
         {right}
+        {isDraggingState && (
+          <div className="absolute inset-0 z-10" />
+        )}
       </div>
     </div>
   );

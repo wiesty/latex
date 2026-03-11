@@ -28,16 +28,22 @@ export function useFileWatcher() {
     setCompileResult,
     setPdfTimestamp,
     setExternalChangeIndicator,
+    autoCompile,
   } = useEditorStore();
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const compileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCompilingRef = useRef(false);
+  const autoCompileRef = useRef(autoCompile);
 
   // Keep refs in sync
   useEffect(() => {
     isCompilingRef.current = compileStatus === "compiling";
   }, [compileStatus]);
+
+  useEffect(() => {
+    autoCompileRef.current = autoCompile;
+  }, [autoCompile]);
 
   const reloadOpenFile = useCallback(
     async (filePath: string) => {
@@ -123,7 +129,7 @@ export function useFileWatcher() {
       );
 
       // Debounced recompile (3s after last change)
-      if (hasTexChanges) {
+      if (hasTexChanges && autoCompileRef.current) {
         if (compileTimerRef.current) clearTimeout(compileTimerRef.current);
         compileTimerRef.current = setTimeout(() => {
           triggerCompile();

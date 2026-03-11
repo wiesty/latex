@@ -8,9 +8,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Maximize,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export default function PDFViewer() {
   const {
@@ -24,13 +28,13 @@ export default function PDFViewer() {
     totalPDFPages,
     setTotalPDFPages,
   } = useEditorStore();
+
   const containerRef = useRef<HTMLDivElement>(null);
-  const [fitMode, setFitMode] = useState<"width" | "page">("width");
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const pdfUrl = useMemo(() => {
-    if (!activeProject) return null;
-    const pdfPath = compiledPdfPath ?? `${activeProject.path}/main.pdf`;
-    return `/api/pdf?path=${encodeURIComponent(pdfPath)}&t=${pdfTimestamp}`;
+    if (!activeProject || !compiledPdfPath) return null;
+    return `/api/pdf?path=${encodeURIComponent(compiledPdfPath)}&t=${pdfTimestamp}`;
   }, [activeProject, compiledPdfPath, pdfTimestamp]);
 
   const handleZoomIn = useCallback(() => {
@@ -71,6 +75,41 @@ export default function PDFViewer() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [handleZoomIn, handleZoomOut]);
+
+  // Reset page count when a new compile starts so onLoadSuccess always triggers a state change
+  useEffect(() => {
+    setTotalPDFPages(0);
+  }, [pdfTimestamp, setTotalPDFPages]);
+
+  // Track which pages have rendered their canvas (heights are stable)
+  const renderedPagesRef = useRef<Set<number>>(new Set());
+  const pendingScrollRef = useRef<number | null>(null);
+
+  // Reset rendered tracking when a new PDF loads
+  useEffect(() => {
+    renderedPagesRef.current = new Set();
+  }, [pdfTimestamp]);
+
+  const tryScroll = useCallback((target: number) => {
+    // Only scroll once all pages BEFORE the target have rendered
+    // (their heights affect the scroll offset of the target page)
+    for (let p = 1; p < target; p++) {
+      if (!renderedPagesRef.current.has(p)) return;
+    }
+    if (!renderedPagesRef.current.has(target)) return;
+    const el = pageRefs.current.get(target);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      pendingScrollRef.current = null;
+    }
+  }, []);
+
+  // When the target page changes, mark it pending and attempt scroll
+  useEffect(() => {
+    if (!totalPDFPages) return;
+    pendingScrollRef.current = currentPDFPage;
+    tryScroll(currentPDFPage);
+  }, [currentPDFPage, totalPDFPages, tryScroll]);
 
   if (!activeProject) {
     return (
@@ -150,13 +189,6 @@ export default function PDFViewer() {
 
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setFitMode(fitMode === "width" ? "page" : "width")}
-            className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-            title={fitMode === "width" ? "Fit to page" : "Fit to width"}
-          >
-            <Maximize className="h-3.5 w-3.5 text-neutral-500" />
-          </button>
-          <button
             onClick={handleDownload}
             className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800"
             title="Download PDF"
@@ -166,32 +198,45 @@ export default function PDFViewer() {
         </div>
       </div>
 
-      {/* PDF embed */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-auto"
-      >
+      {/* PDF pages */}
+      <div ref={containerRef} className="flex-1 overflow-auto">
         {pdfUrl ? (
-          <div
-            className="flex justify-center"
-            style={{ transform: `scale(${pdfZoom})`, transformOrigin: "top center" }}
+          <Document
+            key={pdfTimestamp}
+            file={pdfUrl}
+            onLoadSuccess={({ numPages }) => {
+              setTotalPDFPages(numPages);
+              // Clamp current page to valid range after reload
+              setCurrentPDFPage(Math.min(Math.max(1, currentPDFPage), numPages));
+            }}
+            onLoadError={() => setTotalPDFPages(0)}
+            className="flex flex-col items-center gap-4 py-4"
           >
-            <iframe
-              src={`${pdfUrl}#page=${currentPDFPage}`}
-              className="h-screen w-full border-0 bg-white shadow-lg"
-              style={{
-                minHeight: fitMode === "page" ? "100%" : "auto",
-              }}
-              title="PDF Preview"
-              onLoad={() => {
-                // Try to get page count from iframe if accessible
-                // This is a basic approach; page count is estimated
-                if (!totalPDFPages) {
-                  setTotalPDFPages(1);
-                }
-              }}
-            />
-          </div>
+            {Array.from({ length: totalPDFPages }, (_, i) => i + 1).map(
+              (pageNum) => (
+                <div
+                  key={pageNum}
+                  ref={(el) => {
+                    if (el) pageRefs.current.set(pageNum, el);
+                    else pageRefs.current.delete(pageNum);
+                  }}
+                >
+                  <Page
+                    pageNumber={pageNum}
+                    scale={pdfZoom}
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
+                    className="shadow-lg"
+                    onRenderSuccess={() => {
+                      renderedPagesRef.current.add(pageNum);
+                      const target = pendingScrollRef.current;
+                      if (target !== null) tryScroll(target);
+                    }}
+                  />
+                </div>
+              )
+            )}
+          </Document>
         ) : (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">

@@ -10,7 +10,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { useState, useEffect, useCallback, useRef, startTransition } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import FileEntryItem from "./FileEntryItem";
 
@@ -30,16 +30,14 @@ export default function FileTree() {
   const refreshFiles = useCallback(() => setRefreshTick((t) => t + 1), []);
 
   useEffect(() => {
-    if (!activeProject) {
-      startTransition(() => setFiles([]));
-      return;
-    }
+    setFiles([]);
+    if (!activeProject) return;
     let cancelled = false;
     const url = `/api/projects?id=files&path=${encodeURIComponent(activeProject.path)}${showHidden ? "&showHidden=true" : ""}`;
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled && data.files) setFiles(data.files);
+        if (!cancelled) setFiles(data.files ?? []);
       })
       .catch(() => {
         if (!cancelled) toast.error("Failed to load files");

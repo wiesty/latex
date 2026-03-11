@@ -27,6 +27,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch {
-    return NextResponse.json({ error: "PDF not found" }, { status: 404 });
+    return NextResponse.json({ error: "PDF not found. Please recompile the LaTeX document." }, { status: 404 });
   }
 }
