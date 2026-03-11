@@ -25,7 +25,7 @@ A self-hosted, browser-based LaTeX editor with live compilation and PDF preview 
 ```yaml
 services:
   latex-editor:
-    image: ghcr.io/wiesty/latex-editor:latest
+    image: ghcr.io/wiesty/latex:latest
     ports:
       - "3107:3107"
     volumes:
@@ -45,7 +45,7 @@ Open [http://localhost:3107](http://localhost:3107).
 docker run -d \
   -p 3107:3107 \
   -v /path/to/my-projects:/projects \
-  ghcr.io/wiesty/latex-editor:latest
+  ghcr.io/wiesty/latex:latest
 ```
 
 ---
@@ -88,8 +88,8 @@ Stores editor state that should survive a container restart: the project list an
 **Prerequisites:** Node.js 20+, `pdflatex` (TeX Live / MacTeX)
 
 ```bash
-git clone https://github.com/wiesty/latex-editor.git
-cd latex-editor
+git clone https://github.com/wiesty/latex.git
+cd latex
 npm install
 npm run dev
 ```

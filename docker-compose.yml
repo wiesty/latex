@@ -1,6 +1,6 @@
 services:
   latex-editor:
-    image: ghcr.io/wiesty/latex-editor:latest
+    image: ghcr.io/wiesty/latex:latest
     # Or build locally:
     # build: .
     ports:
