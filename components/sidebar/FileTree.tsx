@@ -90,7 +90,7 @@ export default function FileTree() {
     }
   };
 
-  const uploadFiles = async (fileList: FileList | File[]) => {
+  const uploadFiles = async (fileList: FileList | File[], force = false) => {
     if (!activeProject) return;
     const files = Array.from(fileList);
     if (files.length === 0) return;
@@ -99,6 +99,7 @@ export default function FileTree() {
     try {
       const formData = new FormData();
       formData.append("projectPath", activeProject.path);
+      if (force) formData.append("force", "true");
       for (const file of files) {
         formData.append("files", file);
       }
@@ -111,18 +112,44 @@ export default function FileTree() {
         toast.error(data.error);
         return;
       }
-      const failed = data.results?.filter((r: { success: boolean }) => !r.success) || [];
-      if (failed.length > 0) {
-        for (const f of failed) {
-          toast.error(`${f.name}: ${f.error}`);
-        }
+
+      // Check for compiled PDF conflicts
+      const conflicts = data.results?.filter(
+        (r: { success: boolean; error?: string }) => !r.success && r.error === "COMPILED_PDF_CONFLICT"
+      ) || [];
+      const otherFailed = data.results?.filter(
+        (r: { success: boolean; error?: string }) => !r.success && r.error !== "COMPILED_PDF_CONFLICT"
+      ) || [];
+
+      for (const f of otherFailed) {
+        toast.error(`${f.name}: ${f.error}`);
       }
+
+      if (conflicts.length > 0 && !force) {
+        const names = conflicts.map((c: { name: string }) => c.name).join(", ");
+        toast.warning(
+          `${names}: Would overwrite compiled PDF.`,
+          {
+            duration: 10000,
+            action: {
+              label: "Upload anyway",
+              onClick: () => {
+                const conflictFiles = files.filter((f) =>
+                  conflicts.some((c: { name: string }) => c.name === f.name)
+                );
+                uploadFiles(conflictFiles, true);
+              },
+            },
+          }
+        );
+      }
+
       if (data.successCount > 0) {
-        toast.success(`${data.successCount} Datei(en) hochgeladen`);
+        toast.success(`${data.successCount} file(s) uploaded`);
       }
       refreshFiles();
     } catch {
-      toast.error("Upload fehlgeschlagen");
+      toast.error("Upload failed");
     } finally {
       setIsUploading(false);
     }
@@ -264,7 +291,7 @@ export default function FileTree() {
           <div className="mx-2 my-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-blue-400 bg-blue-50/50 py-6 dark:border-blue-600 dark:bg-blue-950/20">
             <Upload className="mb-1 h-5 w-5 text-blue-500" />
             <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
-              Dateien hier ablegen
+              Drop files here
             </span>
           </div>
         )}
@@ -278,9 +305,9 @@ export default function FileTree() {
             key={entry.path}
             entry={entry}
             activeFilePath={activeFile?.path || null}
-            onSelect={(entry) =>
-              openFile({ path: entry.path, name: entry.name, unsaved: false })
-            }
+            onSelect={(entry) => {
+              openFile({ path: entry.path, name: entry.name, unsaved: false });
+            }}
             onDelete={handleDeleteFile}
             depth={0}
           />

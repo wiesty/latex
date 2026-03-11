@@ -129,6 +129,15 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
+// LaTeX build artifacts that should be hidden from the file tree
+const LATEX_BUILD_EXTENSIONS = new Set([
+  ".aux", ".log", ".out", ".toc", ".lof", ".lot",
+  ".fls", ".fdb_latexmk", ".synctex.gz", ".synctex",
+  ".bbl", ".blg", ".bcf", ".run.xml",
+  ".nav", ".snm", ".vrb", ".idx", ".ind", ".ilg",
+  ".glg", ".glo", ".gls", ".ist",
+]);
+
 async function buildFileTree(
   dirPath: string,
   rootPath: string
@@ -137,6 +146,14 @@ async function buildFileTree(
   const result: FileEntry[] = [];
 
   const allowedExtensions = [".tex", ".bib", ".sty", ".cls", ".bst", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".eps", ".pdf", ".tikz", ".pgf", ".csv", ".dat", ".txt", ".md"];
+
+  // Collect .tex file base names to identify compiled PDFs
+  const texBaseNames = new Set<string>();
+  for (const entry of entries) {
+    if (entry.isFile() && path.extname(entry.name).toLowerCase() === ".tex") {
+      texBaseNames.add(path.basename(entry.name, ".tex"));
+    }
+  }
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
@@ -156,6 +173,16 @@ async function buildFileTree(
       }
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
+
+      // Skip LaTeX build artifacts
+      if (LATEX_BUILD_EXTENSIONS.has(ext)) continue;
+
+      // Skip compiled PDFs (PDF with same base name as a .tex file)
+      if (ext === ".pdf") {
+        const baseName = path.basename(entry.name, ".pdf");
+        if (texBaseNames.has(baseName)) continue;
+      }
+
       if (allowedExtensions.includes(ext)) {
         result.push({
           name: entry.name,

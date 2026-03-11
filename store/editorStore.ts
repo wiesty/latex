@@ -64,6 +64,10 @@ interface EditorStore {
   cursorLine: number;
   cursorColumn: number;
   setCursorPosition: (line: number, column: number) => void;
+
+  // File watcher
+  externalChangeIndicator: string | null;
+  setExternalChangeIndicator: (msg: string | null) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -161,4 +165,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   cursorColumn: 1,
   setCursorPosition: (line, column) =>
     set({ cursorLine: line, cursorColumn: column }),
+
+  // File watcher
+  externalChangeIndicator: null,
+  setExternalChangeIndicator: (msg) => set({ externalChangeIndicator: msg }),
 }));

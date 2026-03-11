@@ -1,6 +1,7 @@
 "use client";
 
 import { useEditorStore } from "@/store/editorStore";
+import { useEffect, useRef } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -8,11 +9,14 @@ import {
   Circle,
   Loader2,
   Terminal,
+  Eye,
+  RefreshCw,
 } from "lucide-react";
 
 export default function StatusBar() {
   const {
     activeFile,
+    activeProject,
     cursorLine,
     cursorColumn,
     compileStatus,
@@ -21,7 +25,22 @@ export default function StatusBar() {
     parsedWarnings,
     toggleLogPanel,
     showLogPanel,
+    externalChangeIndicator,
+    setExternalChangeIndicator,
   } = useEditorStore();
+
+  // Auto-clear external change indicator after 5s
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!externalChangeIndicator) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setExternalChangeIndicator(null);
+    }, 5000);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [externalChangeIndicator, setExternalChangeIndicator]);
 
   return (
     <div className="flex h-7 items-center justify-between border-t border-neutral-200 bg-neutral-50 px-3 text-[11px] dark:border-neutral-800 dark:bg-neutral-950">
@@ -53,6 +72,20 @@ export default function StatusBar() {
 
       {/* Right */}
       <div className="flex items-center gap-2 text-neutral-500">
+        {/* External change indicator */}
+        {externalChangeIndicator && (
+          <span className="flex items-center gap-1 text-[10px] text-amber-500 animate-in fade-in">
+            <RefreshCw className="h-3 w-3" />
+            {externalChangeIndicator}
+          </span>
+        )}
+        {/* Watching indicator */}
+        {activeProject && (
+          <span className="flex items-center gap-1 text-[10px] text-neutral-400">
+            <Eye className="h-3 w-3" />
+            Watching
+          </span>
+        )}
         <button
           onClick={toggleLogPanel}
           className={`rounded p-1 transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-800 ${

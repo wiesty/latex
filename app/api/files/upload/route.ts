@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const projectPath = formData.get("projectPath") as string;
+    const forceOverwrite = formData.get("force") === "true";
     const files = formData.getAll("files") as File[];
 
     if (!projectPath) {
@@ -86,6 +87,24 @@ export async function POST(request: NextRequest) {
           error: "Invalid file path",
         });
         continue;
+      }
+
+      // Check if this would overwrite a compiled PDF
+      if (ext === ".pdf" && !forceOverwrite) {
+        const baseName = path.basename(safeName, ".pdf");
+        const texPath = path.join(projectPath, `${baseName}.tex`);
+        try {
+          await fs.access(texPath);
+          // .tex file exists → this is likely a compiled PDF
+          results.push({
+            name: file.name,
+            success: false,
+            error: "COMPILED_PDF_CONFLICT",
+          });
+          continue;
+        } catch {
+          // No matching .tex file — safe to upload
+        }
       }
 
       try {

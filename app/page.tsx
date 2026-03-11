@@ -8,6 +8,7 @@ import StatusBar from "@/components/layout/StatusBar";
 import LogPanel from "@/components/layout/LogPanel";
 import ResizableSplit from "@/components/layout/ResizableSplit";
 import { useEditorStore } from "@/store/editorStore";
+import { useFileWatcher } from "@/hooks/useFileWatcher";
 
 const MonacoEditor = dynamic(
   () => import("@/components/editor/MonacoEditor"),
@@ -20,6 +21,7 @@ const PDFViewer = dynamic(() => import("@/components/pdf/PDFViewer"), {
 
 export default function Home() {
   const { showPDF } = useEditorStore();
+  useFileWatcher();
 
   return (
     <div className="flex h-screen flex-col bg-white dark:bg-neutral-950">
