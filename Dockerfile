@@ -14,6 +14,10 @@ RUN npm run build
 # --- Production stage ---
 FROM node:24-alpine AS runner
 
+LABEL org.opencontainers.image.source=https://github.com/wiesty/latex
+LABEL org.opencontainers.image.description="Self-hosted browser-based LaTeX editor"
+LABEL org.opencontainers.image.licenses=MIT
+
 WORKDIR /app
 
 # Install TeX Live (basic scheme + commonly used packages)
