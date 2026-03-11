@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compileLatex, checkLatexInstalled } from "@/lib/compile";
-import path from "path";
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,14 +24,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate that projectPath exists and has input/output structure
+    // Validate that projectPath exists
     const fs = await import("fs/promises");
-    const inputDir = path.join(projectPath, "input");
     try {
-      await fs.access(inputDir);
+      await fs.access(projectPath);
     } catch {
       return NextResponse.json(
-        { error: `Input directory not found: ${inputDir}` },
+        { error: `Project directory not found: ${projectPath}` },
         { status: 400 }
       );
     }

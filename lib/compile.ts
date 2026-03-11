@@ -11,30 +11,24 @@ export async function compileLatex(
   projectPath: string,
   mainFile: string = "main.tex"
 ): Promise<CompileResult> {
-  const inputDir = path.join(projectPath, "input");
-  const outputDir = path.join(projectPath, "output");
   const mainBaseName = mainFile.replace(/\.tex$/, "");
   const start = Date.now();
 
-  // Ensure output directory exists
-  await fs.mkdir(outputDir, { recursive: true });
-
-  const pdflatexCmd = `pdflatex -interaction=nonstopmode -output-directory="${outputDir}" "${path.join(inputDir, mainFile)}"`;
-  const bibtexCmd = `cd "${outputDir}" && bibtex "${mainBaseName}"`;
+  const pdflatexCmd = `pdflatex -interaction=nonstopmode "${path.join(projectPath, mainFile)}"`;
+  const bibtexCmd = `bibtex "${mainBaseName}"`;
 
   try {
     // Run pdflatex -> bibtex -> pdflatex -> pdflatex
-    await runCommand(pdflatexCmd, inputDir);
-    
-    // Copy .aux to output for bibtex (if not already there via -output-directory)
+    await runCommand(pdflatexCmd, projectPath);
+
     try {
-      await runCommand(bibtexCmd, outputDir);
+      await runCommand(bibtexCmd, projectPath);
     } catch {
       // bibtex may fail if no citations, that's OK
     }
 
-    await runCommand(pdflatexCmd, inputDir);
-    await runCommand(pdflatexCmd, inputDir);
+    await runCommand(pdflatexCmd, projectPath);
+    await runCommand(pdflatexCmd, projectPath);
   } catch {
     // Even if pdflatex returns non-zero, we still want to parse logs
   }
@@ -43,7 +37,7 @@ export async function compileLatex(
 
   // Read log file
   let log = "";
-  const logPath = path.join(outputDir, `${mainBaseName}.log`);
+  const logPath = path.join(projectPath, `${mainBaseName}.log`);
   try {
     log = await fs.readFile(logPath, "utf-8");
   } catch {
@@ -53,7 +47,7 @@ export async function compileLatex(
   const { errors, warnings } = parseLatexLog(log);
 
   // Check if PDF was created
-  const pdfPath = path.join(outputDir, `${mainBaseName}.pdf`);
+  const pdfPath = path.join(projectPath, `${mainBaseName}.pdf`);
   let pdfExists = false;
   try {
     await fs.access(pdfPath);
@@ -72,6 +66,15 @@ export async function compileLatex(
   };
 }
 
+function getTexPath(): string {
+  const extra = [
+    "/Library/TeX/texbin",          // macOS (MacTeX)
+    "/usr/local/texlive/2024/bin/x86_64-linux", // Linux TeX Live
+    "/usr/bin",                     // Linux distro packages
+  ];
+  return [...extra, process.env.PATH].filter(Boolean).join(":");
+}
+
 async function runCommand(
   cmd: string,
   cwd: string
@@ -81,7 +84,7 @@ async function runCommand(
     timeout: 60000,
     env: {
       ...process.env,
-      PATH: `/Library/TeX/texbin:${process.env.PATH}`,
+      PATH: getTexPath(),
     },
   });
 }
@@ -91,7 +94,7 @@ export async function checkLatexInstalled(): Promise<boolean> {
     await execAsync("which pdflatex", {
       env: {
         ...process.env,
-        PATH: `/Library/TeX/texbin:${process.env.PATH}`,
+        PATH: getTexPath(),
       },
     });
     return true;

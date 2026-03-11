@@ -52,7 +52,7 @@ export default function FileTree() {
       fileName += ".tex";
     }
 
-    const filePath = `${activeProject.path}/input/${fileName}`;
+    const filePath = `${activeProject.path}/${fileName}`;
 
     try {
       await fetch("/api/files", {

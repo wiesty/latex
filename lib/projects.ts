@@ -2,10 +2,9 @@ import fs from "fs/promises";
 import path from "path";
 import { Project } from "@/types";
 
-const CONFIG_DIR = path.join(
-  process.env.HOME || process.env.USERPROFILE || "~",
-  ".latex-editor"
-);
+const CONFIG_DIR =
+  process.env.LATEX_CONFIG_DIR ||
+  path.join(process.env.HOME || process.env.USERPROFILE || "~", ".latex-editor");
 const PROJECTS_FILE = path.join(CONFIG_DIR, "projects.json");
 
 async function ensureConfigDir(): Promise<void> {
@@ -26,44 +25,36 @@ export async function getProjects(): Promise<Project[]> {
     projects = [];
   }
 
-  // Auto-seed from environment variables (*_FOLDER)
-  const envFolders = getEnvFolders();
-  let changed = false;
-  for (const folderPath of envFolders) {
-    const alreadyExists = projects.some((p) => p.path === folderPath);
-    if (alreadyExists) continue;
-
-    // Verify the path exists with input/ subdirectory
+  // Auto-discover subfolders inside LATEX_PROJECTS_DIR
+  const projectsDir = process.env.LATEX_PROJECTS_DIR;
+  if (projectsDir) {
+    let changed = false;
     try {
-      await fs.access(path.join(folderPath, "input"));
-      const name = path.basename(folderPath);
-      projects.push({
-        id: `${name}-env-${Date.now()}`,
-        name,
-        path: folderPath,
-        lastOpened: new Date().toISOString(),
-      });
-      changed = true;
-    } catch {
-      // Path doesn't exist or has no input/ dir — skip
-    }
-  }
+      const entries = await fs.readdir(projectsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+        const folderPath = path.join(projectsDir, entry.name);
+        const alreadyExists = projects.some((p) => p.path === folderPath);
+        if (alreadyExists) continue;
 
-  if (changed) {
-    await saveProjects(projects);
+        projects.push({
+          id: `${entry.name}-auto-${Date.now()}`,
+          name: entry.name,
+          path: folderPath,
+          lastOpened: new Date().toISOString(),
+        });
+        changed = true;
+      }
+    } catch {
+      // projects dir doesn't exist yet — that's fine
+    }
+
+    if (changed) {
+      await saveProjects(projects);
+    }
   }
 
   return projects;
-}
-
-function getEnvFolders(): string[] {
-  const folders: string[] = [];
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key.endsWith("_FOLDER") && value) {
-      folders.push(value);
-    }
-  }
-  return folders;
 }
 
 export async function saveProjects(projects: Project[]): Promise<void> {

@@ -1,0 +1,15 @@
+services:
+  latex-editor:
+    image: ghcr.io/wiesty/latex-editor:latest
+    # Or build locally:
+    # build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Map your projects folder — each subfolder becomes a project
+      - ./projects:/projects
+      # Persist editor configuration
+      - latex-config:/data/config
+
+volumes:
+  latex-config:

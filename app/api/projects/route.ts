@@ -22,9 +22,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const inputDir = path.join(projectPath, "input");
     try {
-      const tree = await buildFileTree(inputDir, inputDir);
+      const tree = await buildFileTree(projectPath, projectPath);
       return NextResponse.json({ files: tree });
     } catch (error) {
       const message =
@@ -61,16 +60,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate the path exists and has the expected structure
+    // Validate the path exists
     try {
-      const inputDir = path.join(projectPath, "input");
-      await fs.access(inputDir);
+      await fs.access(projectPath);
     } catch {
       return NextResponse.json(
-        {
-          error:
-            "Invalid project folder. Must contain an 'input' subdirectory.",
-        },
+        { error: "Project folder does not exist." },
         { status: 400 }
       );
     }

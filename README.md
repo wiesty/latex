@@ -1,36 +1,127 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Wiesty's LaTeX Editor
 
-## Getting Started
+A self-hosted, browser-based LaTeX editor with live compilation and PDF preview — powered by Next.js and Monaco Editor. Run it anywhere via Docker.
 
-First, run the development server:
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Features
+
+- **Monaco Editor** — VS Code-grade editing with LaTeX syntax highlighting, autocompletion, and bracket matching
+- **Live PDF Preview** — compile and preview your document side-by-side
+- **Multi-Project Support** — manage multiple LaTeX projects simultaneously
+- **Dark / Light Theme** — toggle between themes with one click
+- **Docker Ready** — single container with TeX Live included, works on Windows, macOS, and Linux
+- **Auto-Import Projects** — map a single folder and subfolders are auto-discovered as projects
+
+## Quick Start with Docker
+
+### Docker Compose (recommended)
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  latex-editor:
+    image: ghcr.io/wiesty/latex-editor:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      # Map your projects folder — each subfolder becomes a project
+      - ./projects:/projects
+      # Persist editor config
+      - latex-config:/data/config
+
+volumes:
+  latex-config:
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```bash
+docker compose up -d
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open [http://localhost:3000](http://localhost:3000).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Docker Run
 
-## Learn More
+```bash
+docker run -d \
+  -p 3000:3000 \
+  -v /path/to/my-projects:/projects \
+  ghcr.io/wiesty/latex-editor:latest
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Project Folder Structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Each project is a single folder containing your `.tex`, `.bib`, `.sty`, `.cls`, and `.bst` files. Compiled output (PDF, logs, aux files) is written to the same folder.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+projects/               ← mounted volume
+├── my-thesis/          ← auto-discovered as project
+│   ├── main.tex
+│   ├── references.bib
+│   ├── chapters/
+│   │   ├── introduction.tex
+│   │   └── methodology.tex
+│   ├── main.pdf        ← generated
+│   └── main.log        ← generated
+└── my-paper/           ← auto-discovered as project
+    ├── main.tex
+    └── main.pdf        ← generated
+```
 
-## Deploy on Vercel
+## Configuration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Environment Variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Description | Default |
+|---|---|---|
+| `LATEX_PROJECTS_DIR` | Root directory for projects — each subfolder is auto-discovered | — |
+| `LATEX_CONFIG_DIR` | Directory for editor config (project list) | `~/.latex-editor` |
+
+### Adding Projects
+
+Projects can be added in two ways:
+
+1. **Folder structure** — Place a subfolder inside the `LATEX_PROJECTS_DIR` directory and it is automatically discovered as a project.
+2. **UI** — Click the **+** button in the project sidebar and enter the absolute path to a project folder.
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 20+
+- pdflatex (via [TeX Live](https://tug.org/texlive/) or [MacTeX](https://tug.org/mactex/))
+
+### Setup
+
+```bash
+git clone https://github.com/wiesty/latex-editor.git
+cd latex-editor
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl/Cmd + S` | Save & Compile |
+| `Ctrl/Cmd + Shift + B` | Compile |
+| `Ctrl/Cmd + +` | Zoom in PDF |
+| `Ctrl/Cmd + -` | Zoom out PDF |
+
+## Tech Stack
+
+- **Framework:** Next.js 16 (App Router)
+- **Editor:** Monaco Editor
+- **State Management:** Zustand
+- **Styling:** Tailwind CSS 4
+- **LaTeX Engine:** pdflatex (TeX Live)
+- **Containerization:** Docker (Alpine + TeX Live)
+
+## License
+
+MIT

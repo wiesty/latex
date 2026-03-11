@@ -28,7 +28,7 @@ export default function PDFViewer() {
 
   const pdfUrl = useMemo(() => {
     if (!activeProject) return null;
-    const pdfPath = `${activeProject.path}/output/main.pdf`;
+    const pdfPath = `${activeProject.path}/main.pdf`;
     return `/api/pdf?path=${encodeURIComponent(pdfPath)}&t=${pdfTimestamp}`;
   }, [activeProject, pdfTimestamp]);
 
