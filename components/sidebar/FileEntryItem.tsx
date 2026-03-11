@@ -8,20 +8,25 @@ import {
   ChevronRight,
   Trash2,
   Image,
+  BookOpen,
 } from "lucide-react";
 import { useState } from "react";
 
 export default function FileEntryItem({
   entry,
   activeFilePath,
+  mainFileName,
   onSelect,
   onDelete,
+  onSetMainFile,
   depth,
 }: {
   entry: FileEntry;
   activeFilePath: string | null;
+  mainFileName: string | null;
   onSelect: (entry: FileEntry) => void;
   onDelete: (e: React.MouseEvent, path: string, name: string) => void;
+  onSetMainFile: (name: string) => void;
   depth: number;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -48,8 +53,10 @@ export default function FileEntryItem({
               key={child.path}
               entry={child}
               activeFilePath={activeFilePath}
+              mainFileName={mainFileName}
               onSelect={onSelect}
               onDelete={onDelete}
+              onSetMainFile={onSetMainFile}
               depth={depth + 1}
             />
           ))}
@@ -61,6 +68,8 @@ export default function FileEntryItem({
   const ext = entry.name.split(".").pop()?.toLowerCase() || "";
   const isImage = ["png", "jpg", "jpeg", "gif", "svg", "eps"].includes(ext);
   const isHidden = entry.name.startsWith(".");
+  const isTex = ext === "tex";
+  const isMainFile = mainFileName === entry.name;
 
   return (
     <div
@@ -81,9 +90,23 @@ export default function FileEntryItem({
         // eslint-disable-next-line jsx-a11y/alt-text
         <Image className="h-3.5 w-3.5 shrink-0 text-green-500" />
       ) : (
-        <File className="h-3.5 w-3.5 shrink-0" />
+        <File className={`h-3.5 w-3.5 shrink-0 ${isMainFile ? "text-orange-500" : ""}`} />
       )}
       <span className="flex-1 truncate">{entry.name}</span>
+      {isMainFile && (
+        <span title="Main file">
+          <BookOpen className="h-2.5 w-2.5 shrink-0 text-orange-500" />
+        </span>
+      )}
+      {isTex && !isMainFile && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onSetMainFile(entry.name); }}
+          className="hidden rounded p-0.5 hover:bg-neutral-300 group-hover:block dark:hover:bg-neutral-700"
+          title="Set as main file"
+        >
+          <BookOpen className="h-2.5 w-2.5 text-neutral-400" />
+        </button>
+      )}
       <button
         onClick={(e) => onDelete(e, entry.path, entry.name)}
         className="hidden rounded p-0.5 hover:bg-neutral-300 group-hover:block dark:hover:bg-neutral-700"

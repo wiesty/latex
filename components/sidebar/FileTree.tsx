@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import FileEntryItem from "./FileEntryItem";
 
 export default function FileTree() {
-  const { activeProject, activeFile, openFile, showFileTree, toggleFileTree } =
+  const { activeProject, activeFile, openFile, showFileTree, toggleFileTree, mainFile, setMainFile } =
     useEditorStore();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [showNewFile, setShowNewFile] = useState(false);
@@ -327,10 +327,12 @@ export default function FileTree() {
             key={entry.path}
             entry={entry}
             activeFilePath={activeFile?.path || null}
+            mainFileName={mainFile}
             onSelect={(entry) => {
               openFile({ path: entry.path, name: entry.name, unsaved: false });
             }}
             onDelete={handleDeleteFile}
+            onSetMainFile={setMainFile}
             depth={0}
           />
         ))}

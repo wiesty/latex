@@ -22,6 +22,7 @@ export function useFileWatcher() {
     openFiles,
     fileContent,
     setFileContent,
+    mainFile,
     compileStatus,
     setCompileStatus,
     setCompileResult,
@@ -66,7 +67,7 @@ export function useFileWatcher() {
       const res = await fetch("/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath: activeProject.path }),
+        body: JSON.stringify({ projectPath: activeProject.path, mainFile: mainFile ?? undefined }),
       });
       const result = await res.json();
 
@@ -81,12 +82,13 @@ export function useFileWatcher() {
         warnings: result.warnings,
         duration: result.duration,
         success: result.success,
+        pdfPath: result.pdfPath,
       });
       setPdfTimestamp(Date.now());
     } catch {
       setCompileStatus("error");
     }
-  }, [activeProject, setCompileStatus, setCompileResult, setPdfTimestamp]);
+  }, [activeProject, mainFile, setCompileStatus, setCompileResult, setPdfTimestamp]);
 
   const handleChanges = useCallback(
     (files: FileChange[]) => {

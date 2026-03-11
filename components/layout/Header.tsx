@@ -21,6 +21,7 @@ export default function Header() {
   const {
     activeProject,
     activeFile,
+    mainFile,
     compileStatus,
     setCompileStatus,
     setCompileResult,
@@ -57,10 +58,13 @@ export default function Header() {
     setCompileStatus("compiling");
 
     try {
+      const entryFile =
+        mainFile ??
+        (activeFile?.name.endsWith(".tex") ? activeFile.name : "main.tex");
       const res = await fetch("/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath: activeProject.path }),
+        body: JSON.stringify({ projectPath: activeProject.path, mainFile: entryFile }),
       });
       const result = await res.json();
 
@@ -76,6 +80,7 @@ export default function Header() {
         warnings: result.warnings,
         duration: result.duration,
         success: result.success,
+        pdfPath: result.pdfPath,
       });
 
       setPdfTimestamp(Date.now());
@@ -94,6 +99,7 @@ export default function Header() {
   }, [
     activeProject,
     activeFile,
+    mainFile,
     compileStatus,
     fileContent,
     markFileSaved,

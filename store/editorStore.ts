@@ -17,6 +17,10 @@ interface EditorStore {
   markFileUnsaved: (path: string) => void;
   markFileSaved: (path: string) => void;
 
+  // Main file (entry point for compilation)
+  mainFile: string | null;
+  setMainFile: (file: string | null) => void;
+
   // Content
   fileContent: Record<string, string>;
   setFileContent: (path: string, content: string) => void;
@@ -27,6 +31,7 @@ interface EditorStore {
   compileLog: string;
   parsedErrors: ParsedError[];
   parsedWarnings: ParsedError[];
+  compiledPdfPath: string | null;
   setCompileStatus: (status: "idle" | "compiling" | "success" | "error") => void;
   setCompileResult: (result: {
     log: string;
@@ -34,6 +39,7 @@ interface EditorStore {
     warnings: ParsedError[];
     duration: number;
     success: boolean;
+    pdfPath?: string;
   }) => void;
 
   // PDF
@@ -88,6 +94,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
         compileLog: "",
         parsedErrors: [],
         parsedWarnings: [],
+        mainFile: null,
+        compiledPdfPath: null,
       };
     }),
 
@@ -127,6 +135,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
       ),
     })),
 
+  // Main file
+  mainFile: null,
+  setMainFile: (file) => set({ mainFile: file }),
+
   // Content
   fileContent: {},
   setFileContent: (path, content) =>
@@ -140,6 +152,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   compileLog: "",
   parsedErrors: [],
   parsedWarnings: [],
+  compiledPdfPath: null,
   setCompileStatus: (status) => set({ compileStatus: status }),
   setCompileResult: (result) =>
     set({
@@ -148,6 +161,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       compileLog: result.log,
       parsedErrors: result.errors,
       parsedWarnings: result.warnings,
+      compiledPdfPath: result.pdfPath ?? null,
     }),
 
   // PDF

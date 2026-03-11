@@ -6,6 +6,24 @@ const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "svg"]);
 const PDF_EXTS = new Set(["pdf"]);
 const VIDEO_EXTS = new Set(["mp4", "webm", "mov"]);
 
+// LaTeX compilation output files — should not be edited
+const LATEX_OUTPUT_EXTS = new Set([
+  "aux", "log", "out", "toc", "lof", "lot",
+  "fls", "fdb_latexmk", "synctex", "gz",
+  "bbl", "blg", "idx", "ind", "ilg",
+  "glo", "gls", "glg", "acn", "acr", "alg",
+  "nav", "snm", "vrb", "bcf", "run.xml",
+]);
+
+export function isReadOnlyFile(name: string): boolean {
+  if (name.startsWith(".")) return true;
+  const ext = getFileExt(name);
+  if (LATEX_OUTPUT_EXTS.has(ext)) return true;
+  // e.g. "main.synctex.gz" — check double extension
+  if (name.endsWith(".synctex.gz")) return true;
+  return false;
+}
+
 function getFileExt(name: string): string {
   return name.split(".").pop()?.toLowerCase() || "";
 }

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 export default function PDFViewer() {
   const {
     activeProject,
+    compiledPdfPath,
     pdfTimestamp,
     pdfZoom,
     setPdfZoom,
@@ -28,9 +29,9 @@ export default function PDFViewer() {
 
   const pdfUrl = useMemo(() => {
     if (!activeProject) return null;
-    const pdfPath = `${activeProject.path}/main.pdf`;
+    const pdfPath = compiledPdfPath ?? `${activeProject.path}/main.pdf`;
     return `/api/pdf?path=${encodeURIComponent(pdfPath)}&t=${pdfTimestamp}`;
-  }, [activeProject, pdfTimestamp]);
+  }, [activeProject, compiledPdfPath, pdfTimestamp]);
 
   const handleZoomIn = useCallback(() => {
     setPdfZoom(Math.min(pdfZoom + 0.25, 3));
@@ -48,9 +49,12 @@ export default function PDFViewer() {
     if (!pdfUrl) return;
     const a = document.createElement("a");
     a.href = pdfUrl;
-    a.download = "main.pdf";
+    const pdfName = compiledPdfPath
+      ? compiledPdfPath.split("/").pop() ?? "output.pdf"
+      : "output.pdf";
+    a.download = pdfName;
     a.click();
-  }, [pdfUrl]);
+  }, [pdfUrl, compiledPdfPath]);
 
   // Keyboard shortcuts for zoom
   useEffect(() => {

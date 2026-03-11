@@ -8,12 +8,13 @@ import { latexLanguageConfig, latexMonarchTokens } from "./latex-language";
 import type { editor as MonacoEditorType } from "monaco-editor";
 import { toast } from "sonner";
 import EditorTabs from "./EditorTabs";
-import FilePreview, { isPreviewable } from "./FilePreview";
+import FilePreview, { isPreviewable, isReadOnlyFile } from "./FilePreview";
 
 export default function MonacoEditor() {
   const {
     activeFile,
     activeProject,
+    mainFile,
     fileContent,
     setFileContent,
     markFileUnsaved,
@@ -27,6 +28,8 @@ export default function MonacoEditor() {
     setCompileResult,
     setPdfTimestamp,
   } = useEditorStore();
+
+  const readOnly = !!(activeFile && isReadOnlyFile(activeFile.name));
   const { resolvedTheme } = useTheme();
   const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null);
   const fetchingRef = useRef<string | null>(null);
@@ -75,7 +78,10 @@ export default function MonacoEditor() {
       const res = await fetch("/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath: activeProject.path }),
+        body: JSON.stringify({
+          projectPath: activeProject.path,
+          mainFile: mainFile ?? (activeFile.name.endsWith(".tex") ? activeFile.name : undefined),
+        }),
       });
       const result = await res.json();
 
@@ -91,6 +97,7 @@ export default function MonacoEditor() {
         warnings: result.warnings,
         duration: result.duration,
         success: result.success,
+        pdfPath: result.pdfPath,
       });
       setPdfTimestamp(Date.now());
 
@@ -106,6 +113,7 @@ export default function MonacoEditor() {
   }, [
     activeFile,
     activeProject,
+    mainFile,
     fileContent,
     markFileSaved,
     setCompileStatus,
@@ -163,7 +171,7 @@ export default function MonacoEditor() {
 
   const handleChange = useCallback(
     (value: string | undefined) => {
-      if (!activeFile || value === undefined) return;
+      if (!activeFile || value === undefined || readOnly) return;
       setFileContent(activeFile.path, value);
       markFileUnsaved(activeFile.path);
 
@@ -173,7 +181,7 @@ export default function MonacoEditor() {
         handleSaveAndCompile();
       }, 1500);
     },
-    [activeFile, setFileContent, markFileUnsaved, handleSaveAndCompile]
+    [activeFile, readOnly, setFileContent, markFileUnsaved, handleSaveAndCompile]
   );
 
   // Update error markers
@@ -244,6 +252,14 @@ export default function MonacoEditor() {
     <div className="flex h-full flex-col">
       {/* Tabs */}
       <EditorTabs />
+      {/* Read-only banner */}
+      {readOnly && (
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-400">
+          <span className="font-medium">Read-only</span>
+          <span className="text-amber-500 dark:text-amber-600">—</span>
+          <span>This file is generated and cannot be edited.</span>
+        </div>
+      )}
       {/* Editor */}
       <div className="flex-1">
         <Editor
@@ -269,6 +285,8 @@ export default function MonacoEditor() {
             autoClosingBrackets: "always",
             autoClosingQuotes: "always",
             tabSize: 2,
+            readOnly,
+            readOnlyMessage: { value: "This file is generated and cannot be edited." },
           }}
         />
       </div>
