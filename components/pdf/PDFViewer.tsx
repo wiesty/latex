@@ -169,12 +169,12 @@ export default function PDFViewer() {
       >
         {pdfUrl ? (
           <div
-            className="flex justify-center p-4"
+            className="flex justify-center"
             style={{ transform: `scale(${pdfZoom})`, transformOrigin: "top center" }}
           >
             <iframe
               src={`${pdfUrl}#page=${currentPDFPage}`}
-              className="h-[calc(100vh-200px)] w-full max-w-200 border-0 bg-white shadow-lg"
+              className="h-screen w-full border-0 bg-white shadow-lg"
               style={{
                 minHeight: fitMode === "page" ? "100%" : "auto",
               }}

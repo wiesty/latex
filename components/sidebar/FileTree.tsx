@@ -105,9 +105,10 @@ export default function FileTree() {
         </span>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setShowNewFile(true)}
-            className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-            title="New file"
+            onClick={() => activeProject && setShowNewFile(true)}
+            disabled={!activeProject}
+            className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30"
+            title={activeProject ? "New file" : "Select a project first"}
           >
             <Plus className="h-3.5 w-3.5 text-neutral-500" />
           </button>

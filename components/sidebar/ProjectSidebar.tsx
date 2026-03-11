@@ -21,7 +21,7 @@ export default function ProjectSidebar() {
   } = useEditorStore();
   const [collapsed, setCollapsed] = useState(false);
   const [showAddInput, setShowAddInput] = useState(false);
-  const [newPath, setNewPath] = useState("");
+  const [newName, setNewName] = useState("");
 
   const loadProjects = useCallback(async () => {
     try {
@@ -40,41 +40,55 @@ export default function ProjectSidebar() {
   }, [loadProjects]);
 
   const handleAddProject = async () => {
-    if (!newPath.trim()) return;
+    if (!newName.trim()) return;
 
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: newPath.trim() }),
+        body: JSON.stringify({ name: newName.trim() }),
       });
       const data = await res.json();
       if (data.error) {
         toast.error(data.error);
         return;
       }
-      setNewPath("");
+      setNewName("");
       setShowAddInput(false);
       await loadProjects();
-      toast.success(`Project "${data.project.name}" added`);
+      toast.success(`Project "${data.project.name}" created`);
     } catch {
-      toast.error("Failed to add project");
+      toast.error("Failed to create project");
     }
   };
 
   const handleRemoveProject = async (e: React.MouseEvent, project: Project) => {
     e.stopPropagation();
     try {
-      await fetch(`/api/projects?id=${encodeURIComponent(project.id)}`, {
-        method: "DELETE",
-      });
+      // Check if folder contains files
+      const res = await fetch(
+        `/api/projects?id=files&path=${encodeURIComponent(project.path)}`
+      );
+      const data = await res.json();
+      const hasFiles = Array.isArray(data.files) && data.files.length > 0;
+
+      const message = hasFiles
+        ? `"${project.name}" enthält Dateien. Projektordner und alle Inhalte unwiderruflich löschen?`
+        : `Projektordner "${project.name}" löschen?`;
+
+      if (!window.confirm(message)) return;
+
+      await fetch(
+        `/api/projects?id=${encodeURIComponent(project.id)}&deleteFolder=true`,
+        { method: "DELETE" }
+      );
       if (activeProject?.id === project.id) {
         setActiveProject(null);
       }
       await loadProjects();
-      toast.success(`Project "${project.name}" removed`);
+      toast.success(`Project "${project.name}" deleted`);
     } catch {
-      toast.error("Failed to remove project");
+      toast.error("Failed to delete project");
     }
   };
 
@@ -135,16 +149,16 @@ export default function ProjectSidebar() {
         <div className="border-b border-neutral-200 p-2 dark:border-neutral-800">
           <input
             type="text"
-            value={newPath}
-            onChange={(e) => setNewPath(e.target.value)}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleAddProject();
               if (e.key === "Escape") {
                 setShowAddInput(false);
-                setNewPath("");
+                setNewName("");
               }
             }}
-            placeholder="/path/to/project"
+            placeholder="Project name"
             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-900 placeholder-neutral-400 focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder-neutral-600"
             autoFocus
           />
@@ -158,7 +172,7 @@ export default function ProjectSidebar() {
             <button
               onClick={() => {
                 setShowAddInput(false);
-                setNewPath("");
+                setNewName("");
               }}
               className="flex-1 rounded bg-neutral-200 px-2 py-0.5 text-[10px] font-medium text-neutral-700 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
             >

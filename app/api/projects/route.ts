@@ -51,11 +51,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    // Create new project folder inside LATEX_PROJECTS_DIR
+    if (body.name) {
+      const projectsDir = process.env.LATEX_PROJECTS_DIR;
+      if (!projectsDir) {
+        return NextResponse.json(
+          { error: "LATEX_PROJECTS_DIR is not configured." },
+          { status: 500 }
+        );
+      }
+      const folderName = path.basename(body.name.trim());
+      if (!folderName) {
+        return NextResponse.json({ error: "Invalid project name." }, { status: 400 });
+      }
+      const newProjectPath = path.join(projectsDir, folderName);
+      try {
+        await fs.mkdir(newProjectPath, { recursive: false });
+      } catch (err: unknown) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "EEXIST") {
+          return NextResponse.json({ error: "A project with that name already exists." }, { status: 409 });
+        }
+        throw err;
+      }
+      const project = await addProject(newProjectPath);
+      return NextResponse.json({ project });
+    }
+
     const { path: projectPath } = body as { path: string };
 
     if (!projectPath) {
       return NextResponse.json(
-        { error: "path is required" },
+        { error: "path or name is required" },
         { status: 400 }
       );
     }
@@ -81,13 +108,19 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const projectId = request.nextUrl.searchParams.get("id");
+  const deleteFolder = request.nextUrl.searchParams.get("deleteFolder") === "true";
 
   if (!projectId) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
   try {
+    const projects = await getProjects();
+    const project = projects.find((p) => p.id === projectId);
     await removeProject(projectId);
+    if (deleteFolder && project) {
+      await fs.rm(project.path, { recursive: true, force: true });
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     const message =

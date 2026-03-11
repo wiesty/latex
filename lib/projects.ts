@@ -64,6 +64,9 @@ export async function saveProjects(projects: Project[]): Promise<void> {
 
 export async function addProject(projectPath: string): Promise<Project> {
   const projects = await getProjects();
+  // Prevent duplicates caused by auto-discovery finding the just-created folder
+  const existing = projects.find((p) => p.path === projectPath);
+  if (existing) return existing;
   const name = path.basename(projectPath);
   const id = `${name}-${Date.now()}`;
   const project: Project = {
