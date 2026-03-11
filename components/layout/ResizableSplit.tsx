@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface ResizableSplitProps {
   left: React.ReactNode;
@@ -21,21 +21,17 @@ export default function ResizableSplit({
   minRightWidth = 20,
   storageKey = "split-width",
 }: ResizableSplitProps) {
-  // Initialize with defaultLeftWidth so server+client first render match (no hydration mismatch).
-  // useLayoutEffect then applies the persisted value before the browser paints.
-  const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
+  const [leftWidth, setLeftWidth] = useState(() => {
+    if (typeof window === "undefined") return defaultLeftWidth;
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) return defaultLeftWidth;
+    const val = parseFloat(stored);
+    return !isNaN(val) && val >= minLeftWidth && val <= 100 - minRightWidth
+      ? val
+      : defaultLeftWidth;
+  });
   const isDragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useLayoutEffect(() => {
-    const stored = localStorage.getItem(storageKey);
-    if (!stored) return;
-    const val = parseFloat(stored);
-    if (!isNaN(val) && val >= minLeftWidth && val <= 100 - minRightWidth) {
-      setLeftWidth(val);
-    }
-  }, [storageKey, minLeftWidth, minRightWidth]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
