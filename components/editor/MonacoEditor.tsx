@@ -196,7 +196,7 @@ export default function MonacoEditor() {
         }, 400);
       });
     },
-    [handleSaveAndCompile, setCursorPosition]
+    [handleSaveAndCompile, setCursorPosition, setCurrentPDFPage]
   );
 
   const handleChange = useCallback(
