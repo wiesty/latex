@@ -7,6 +7,8 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Check,
+  Copy,
   Info,
   X,
 } from "lucide-react";
@@ -22,6 +24,26 @@ export default function LogPanel() {
   } = useEditorStore();
   const [filter, setFilter] = useState<"all" | "errors" | "warnings">("all");
   const [view, setView] = useState<"parsed" | "raw">("parsed");
+  const [copied, setCopied] = useState(false);
+
+  function handleCopyList() {
+    const items =
+      filter === "errors"
+        ? parsedErrors
+        : filter === "warnings"
+          ? parsedWarnings
+          : [...parsedErrors, ...parsedWarnings];
+    const text = items
+      .map((e) => {
+        const loc = e.file ? ` (${e.file}${e.line !== null ? `:${e.line}` : ""})` : "";
+        return `[${e.type.toUpperCase()}]${loc} ${e.message}${e.context ? `\n${e.context}` : ""}`;
+      })
+      .join("\n\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   if (!showLogPanel) return null;
 
@@ -82,12 +104,27 @@ export default function LogPanel() {
             </div>
           )}
         </div>
-        <button
-          onClick={toggleLogPanel}
-          className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-        >
-          <X className="h-3.5 w-3.5 text-neutral-400" />
-        </button>
+        <div className="flex items-center gap-1">
+          {view === "parsed" && filteredItems.length > 0 && (
+            <button
+              onClick={handleCopyList}
+              title="Alle kopieren"
+              className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <Copy className="h-3.5 w-3.5 text-neutral-400" />
+              )}
+            </button>
+          )}
+          <button
+            onClick={toggleLogPanel}
+            className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            <X className="h-3.5 w-3.5 text-neutral-400" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -138,6 +175,17 @@ function FilterButton({
 
 function LogItem({ item }: { item: ParsedError }) {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    const loc = item.file ? ` (${item.file}${item.line !== null ? `:${item.line}` : ""})` : "";
+    const text = `[${item.type.toUpperCase()}]${loc} ${item.message}${item.context ? `\n${item.context}` : ""}`;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   const icon =
     item.type === "error" ? (
@@ -154,29 +202,42 @@ function LogItem({ item }: { item: ParsedError }) {
           : "border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20"
       }`}
     >
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-start gap-2 text-left"
-      >
-        {icon}
-        <div className="flex-1 text-xs">
-          <span className="font-medium text-neutral-900 dark:text-neutral-100">
-            {item.message}
-          </span>
-          {item.file && (
-            <span className="ml-2 text-neutral-500">
-              {item.file}
-              {item.line !== null && `:${item.line}`}
+      <div className="flex w-full items-start gap-2">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+        >
+          {icon}
+          <div className="flex-1 text-xs">
+            <span className="font-medium text-neutral-900 dark:text-neutral-100">
+              {item.message}
             </span>
-          )}
-        </div>
-        {item.context &&
-          (expanded ? (
-            <ChevronUp className="h-3 w-3 shrink-0 text-neutral-400" />
+            {item.file && (
+              <span className="ml-2 text-neutral-500">
+                {item.file}
+                {item.line !== null && `:${item.line}`}
+              </span>
+            )}
+          </div>
+          {item.context &&
+            (expanded ? (
+              <ChevronUp className="h-3 w-3 shrink-0 text-neutral-400" />
+            ) : (
+              <ChevronDown className="h-3 w-3 shrink-0 text-neutral-400" />
+            ))}
+        </button>
+        <button
+          onClick={handleCopy}
+          title="Kopieren"
+          className="shrink-0 rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+        >
+          {copied ? (
+            <Check className="h-3 w-3 text-green-500" />
           ) : (
-            <ChevronDown className="h-3 w-3 shrink-0 text-neutral-400" />
-          ))}
-      </button>
+            <Copy className="h-3 w-3 text-neutral-400" />
+          )}
+        </button>
+      </div>
       {expanded && item.context && (
         <pre className="mt-1.5 rounded bg-neutral-100 p-2 font-mono text-[10px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
           {item.context}
