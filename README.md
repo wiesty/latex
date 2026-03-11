@@ -1,5 +1,7 @@
 # Wiesty's LaTeX Editor
 
+![Preview](.github/preview.png)
+
 A self-hosted, browser-based LaTeX editor with live compilation and PDF preview — powered by Next.js and Monaco Editor. Run it on your local machine with docker. 
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
