@@ -75,7 +75,21 @@ export const useEditorStore = create<EditorStore>((set) => ({
   projects: [],
   activeProject: null,
   setProjects: (projects) => set({ projects }),
-  setActiveProject: (project) => set({ activeProject: project }),
+  setActiveProject: (project) =>
+    set((state) => {
+      if (project?.id === state.activeProject?.id) return { activeProject: project };
+      // Clear open files, content, and PDF when switching projects
+      return {
+        activeProject: project,
+        openFiles: [],
+        activeFile: null,
+        fileContent: {},
+        compileStatus: "idle" as const,
+        compileLog: "",
+        parsedErrors: [],
+        parsedWarnings: [],
+      };
+    }),
 
   // Files
   openFiles: [],

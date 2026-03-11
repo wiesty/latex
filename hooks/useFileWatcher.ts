@@ -19,7 +19,6 @@ interface WatchEvent {
 export function useFileWatcher() {
   const {
     activeProject,
-    activeFile,
     openFiles,
     fileContent,
     setFileContent,

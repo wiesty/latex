@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   if (projectId === "files") {
     // Get file tree for a project
     const projectPath = request.nextUrl.searchParams.get("path");
+    const showHidden = request.nextUrl.searchParams.get("showHidden") === "true";
     if (!projectPath) {
       return NextResponse.json(
         { error: "path is required" },
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const tree = await buildFileTree(projectPath, projectPath);
+      const tree = await buildFileTree(projectPath, projectPath, showHidden);
       return NextResponse.json({ files: tree });
     } catch (error) {
       const message =
@@ -140,7 +141,8 @@ const LATEX_BUILD_EXTENSIONS = new Set([
 
 async function buildFileTree(
   dirPath: string,
-  rootPath: string
+  rootPath: string,
+  showHidden = false
 ): Promise<FileEntry[]> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   const result: FileEntry[] = [];
@@ -159,10 +161,10 @@ async function buildFileTree(
     const fullPath = path.join(dirPath, entry.name);
 
     if (entry.isDirectory()) {
-      // Skip hidden directories and common LaTeX temp dirs
-      if (entry.name.startsWith(".") || entry.name === "__MACOSX") continue;
+      // Skip hidden directories and common LaTeX temp dirs (unless showHidden)
+      if (!showHidden && (entry.name.startsWith(".") || entry.name === "__MACOSX")) continue;
 
-      const children = await buildFileTree(fullPath, rootPath);
+      const children = await buildFileTree(fullPath, rootPath, showHidden);
       if (children.length > 0) {
         result.push({
           name: entry.name,
@@ -174,16 +176,16 @@ async function buildFileTree(
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
 
-      // Skip LaTeX build artifacts
-      if (LATEX_BUILD_EXTENSIONS.has(ext)) continue;
+      // Skip LaTeX build artifacts (unless showHidden)
+      if (!showHidden && LATEX_BUILD_EXTENSIONS.has(ext)) continue;
 
       // Skip compiled PDFs (PDF with same base name as a .tex file)
-      if (ext === ".pdf") {
+      if (!showHidden && ext === ".pdf") {
         const baseName = path.basename(entry.name, ".pdf");
         if (texBaseNames.has(baseName)) continue;
       }
 
-      if (allowedExtensions.includes(ext)) {
+      if (showHidden || allowedExtensions.includes(ext)) {
         result.push({
           name: entry.name,
           path: fullPath,

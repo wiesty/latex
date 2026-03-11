@@ -3,19 +3,16 @@
 import { useEditorStore } from "@/store/editorStore";
 import { FileEntry } from "@/types";
 import {
-  File,
-  FolderOpen,
-  ChevronDown,
-  ChevronRight,
   Plus,
-  Trash2,
   PanelLeftClose,
   PanelLeft,
   Upload,
-  Image,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import { toast } from "sonner";
+import FileEntryItem from "./FileEntryItem";
 
 export default function FileTree() {
   const { activeProject, activeFile, openFile, showFileTree, toggleFileTree } =
@@ -26,6 +23,7 @@ export default function FileTree() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
@@ -37,7 +35,8 @@ export default function FileTree() {
       return;
     }
     let cancelled = false;
-    fetch(`/api/projects?id=files&path=${encodeURIComponent(activeProject.path)}`)
+    const url = `/api/projects?id=files&path=${encodeURIComponent(activeProject.path)}${showHidden ? "&showHidden=true" : ""}`;
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (!cancelled && data.files) setFiles(data.files);
@@ -48,7 +47,7 @@ export default function FileTree() {
     return () => {
       cancelled = true;
     };
-  }, [activeProject, refreshTick]);
+  }, [activeProject, refreshTick, showHidden]);
 
   const handleCreateFile = async () => {
     if (!newFileName.trim() || !activeProject) return;
@@ -234,6 +233,17 @@ export default function FileTree() {
         </span>
         <div className="flex items-center gap-1">
           <button
+            onClick={() => setShowHidden((v) => !v)}
+            className={`rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${showHidden ? "text-blue-500" : ""}`}
+            title={showHidden ? "Hide hidden files" : "Show hidden files"}
+          >
+            {showHidden ? (
+              <Eye className="h-3.5 w-3.5" />
+            ) : (
+              <EyeOff className="h-3.5 w-3.5 text-neutral-500" />
+            )}
+          </button>
+          <button
             onClick={() => activeProject && fileInputRef.current?.click()}
             disabled={!activeProject || isUploading}
             className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30"
@@ -242,9 +252,14 @@ export default function FileTree() {
             <Upload className="h-3.5 w-3.5 text-neutral-500" />
           </button>
           <button
-            onClick={() => activeProject && setShowNewFile(true)}
+            onClick={() => {
+              if (activeProject) {
+                setShowNewFile((v) => !v);
+                if (showNewFile) setNewFileName("");
+              }
+            }}
             disabled={!activeProject}
-            className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30"
+            className={`rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30 ${showNewFile ? "bg-neutral-200 dark:bg-neutral-800" : ""}`}
             title={activeProject ? "New file" : "Select a project first"}
           >
             <Plus className="h-3.5 w-3.5 text-neutral-500" />
@@ -272,6 +287,13 @@ export default function FileTree() {
                 setShowNewFile(false);
                 setNewFileName("");
               }
+            }}
+            onBlur={() => {
+              // Close when clicking away (if empty)
+              setTimeout(() => {
+                setShowNewFile(false);
+                setNewFileName("");
+              }, 150);
             }}
             placeholder="filename.tex"
             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-900 placeholder-neutral-400 focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
@@ -313,88 +335,6 @@ export default function FileTree() {
           />
         ))}
       </div>
-    </div>
-  );
-}
-
-function FileEntryItem({
-  entry,
-  activeFilePath,
-  onSelect,
-  onDelete,
-  depth,
-}: {
-  entry: FileEntry;
-  activeFilePath: string | null;
-  onSelect: (entry: FileEntry) => void;
-  onDelete: (e: React.MouseEvent, path: string, name: string) => void;
-  depth: number;
-}) {
-  const [expanded, setExpanded] = useState(true);
-
-  if (entry.type === "directory") {
-    return (
-      <div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center gap-1 px-2 py-1 text-left text-xs text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/50"
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        >
-          {expanded ? (
-            <ChevronDown className="h-3 w-3 shrink-0" />
-          ) : (
-            <ChevronRight className="h-3 w-3 shrink-0" />
-          )}
-          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-          <span className="truncate font-medium">{entry.name}</span>
-        </button>
-        {expanded &&
-          entry.children?.map((child) => (
-            <FileEntryItem
-              key={child.path}
-              entry={child}
-              activeFilePath={activeFilePath}
-              onSelect={onSelect}
-              onDelete={onDelete}
-              depth={depth + 1}
-            />
-          ))}
-      </div>
-    );
-  }
-
-  const isActive = activeFilePath === entry.path;
-  const ext = entry.name.split(".").pop()?.toLowerCase() || "";
-  const isImage = ["png", "jpg", "jpeg", "gif", "svg", "eps"].includes(ext);
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelect(entry)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onSelect(entry);
-      }}
-      className={`group flex w-full cursor-pointer items-center gap-1.5 py-1 pr-2 text-left text-xs transition-colors ${
-        isActive
-          ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
-          : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/50"
-      }`}
-      style={{ paddingLeft: `${depth * 12 + 20}px` }}
-    >
-      {isImage ? (
-        <Image className="h-3.5 w-3.5 shrink-0 text-green-500" />
-      ) : (
-        <File className="h-3.5 w-3.5 shrink-0" />
-      )}
-      <span className="flex-1 truncate">{entry.name}</span>
-      <button
-        onClick={(e) => onDelete(e, entry.path, entry.name)}
-        className="hidden rounded p-0.5 hover:bg-neutral-300 group-hover:block dark:hover:bg-neutral-700"
-        title="Delete file"
-      >
-        <Trash2 className="h-2.5 w-2.5 text-neutral-400" />
-      </button>
     </div>
   );
 }

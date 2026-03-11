@@ -29,9 +29,6 @@ services:
     volumes:
       - ./projects:/projects
       - latex-config:/data/config
-
-volumes:
-  latex-config:
 ```
 
 ```bash

@@ -7,20 +7,8 @@ import { useCallback, useEffect, useRef } from "react";
 import { latexLanguageConfig, latexMonarchTokens } from "./latex-language";
 import type { editor as MonacoEditorType } from "monaco-editor";
 import { toast } from "sonner";
-import { FileText, Image as ImageIcon, FileVideo, File } from "lucide-react";
-
-const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "svg"]);
-const PDF_EXTS = new Set(["pdf"]);
-const VIDEO_EXTS = new Set(["mp4", "webm", "mov"]);
-
-function getFileExt(name: string): string {
-  return name.split(".").pop()?.toLowerCase() || "";
-}
-
-function isPreviewable(name: string): boolean {
-  const ext = getFileExt(name);
-  return IMAGE_EXTS.has(ext) || PDF_EXTS.has(ext) || VIDEO_EXTS.has(ext);
-}
+import EditorTabs from "./EditorTabs";
+import FilePreview, { isPreviewable } from "./FilePreview";
 
 export default function MonacoEditor() {
   const {
@@ -283,116 +271,6 @@ export default function MonacoEditor() {
             tabSize: 2,
           }}
         />
-      </div>
-    </div>
-  );
-}
-
-function EditorTabs() {
-  const { openFiles, activeFile, setActiveFile, closeFile } = useEditorStore();
-
-  if (openFiles.length === 0) return null;
-
-  return (
-    <div className="flex border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
-      {openFiles.map((file) => (
-        <div
-          key={file.path}
-          className={`group flex items-center gap-1.5 border-r border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800 ${
-            activeFile?.path === file.path
-              ? "bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100"
-              : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800/50 dark:hover:text-neutral-300"
-          }`}
-        >
-          <button
-            onClick={() =>
-              setActiveFile({ path: file.path, name: file.name, unsaved: file.unsaved })
-            }
-            className="flex items-center gap-1.5"
-          >
-            {file.unsaved && (
-              <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-            )}
-            <span>{file.name}</span>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              closeFile(file.path);
-            }}
-            className="ml-1 hidden rounded p-0.5 hover:bg-neutral-200 group-hover:block dark:hover:bg-neutral-700"
-          >
-            <span className="text-[10px] text-neutral-400">✕</span>
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function FilePreview({ path, name }: { path: string; name: string }) {
-  const ext = getFileExt(name);
-  const previewUrl = `/api/files/preview?path=${encodeURIComponent(path)}&t=${Date.now()}`;
-
-  if (IMAGE_EXTS.has(ext)) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center overflow-auto bg-neutral-100 p-8 dark:bg-neutral-900">
-        <div className="mb-3 flex items-center gap-2 text-neutral-500">
-          <ImageIcon className="h-4 w-4" />
-          <span className="text-xs font-medium">{name}</span>
-        </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={previewUrl}
-          alt={name}
-          className="max-h-full max-w-full rounded-lg border border-neutral-200 object-contain shadow-sm dark:border-neutral-700"
-        />
-      </div>
-    );
-  }
-
-  if (PDF_EXTS.has(ext)) {
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden bg-neutral-100 dark:bg-neutral-900">
-        <div className="flex items-center gap-2 px-4 py-2 text-neutral-500">
-          <FileText className="h-4 w-4" />
-          <span className="text-xs font-medium">{name}</span>
-        </div>
-        <iframe
-          src={previewUrl}
-          className="flex-1 border-0"
-          title={name}
-        />
-      </div>
-    );
-  }
-
-  if (VIDEO_EXTS.has(ext)) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center overflow-auto bg-neutral-100 p-8 dark:bg-neutral-900">
-        <div className="mb-3 flex items-center gap-2 text-neutral-500">
-          <FileVideo className="h-4 w-4" />
-          <span className="text-xs font-medium">{name}</span>
-        </div>
-        <video
-          src={previewUrl}
-          controls
-          className="max-h-full max-w-full rounded-lg border border-neutral-200 shadow-sm dark:border-neutral-700"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-1 items-center justify-center bg-white dark:bg-neutral-950">
-      <div className="text-center">
-        <File className="mx-auto mb-2 h-8 w-8 text-neutral-300" />
-        <p className="text-sm text-neutral-400">
-          Preview not available for this file type
-        </p>
-        <p className="mt-1 text-xs text-neutral-300 dark:text-neutral-600">
-          {name}
-        </p>
       </div>
     </div>
   );

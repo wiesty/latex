@@ -8,8 +8,9 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 
 export default function ProjectSidebar() {
@@ -22,6 +23,8 @@ export default function ProjectSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [showAddInput, setShowAddInput] = useState(false);
   const [newName, setNewName] = useState("");
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; project: Project } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -73,8 +76,8 @@ export default function ProjectSidebar() {
       const hasFiles = Array.isArray(data.files) && data.files.length > 0;
 
       const message = hasFiles
-        ? `"${project.name}" enthält Dateien. Projektordner und alle Inhalte unwiderruflich löschen?`
-        : `Projektordner "${project.name}" löschen?`;
+        ? `"${project.name}" contains files. Permanently delete the project folder and all contents?`
+        : `Delete project folder "${project.name}"?`;
 
       if (!window.confirm(message)) return;
 
@@ -104,6 +107,39 @@ export default function ProjectSidebar() {
       // non-critical
     }
   };
+
+  const handleExportZip = async (project: Project) => {
+    setContextMenu(null);
+    try {
+      const res = await fetch(`/api/projects/export?path=${encodeURIComponent(project.path)}`);
+      if (!res.ok) {
+        toast.error("Export failed");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${project.name}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported "${project.name}.zip"`);
+    } catch {
+      toast.error("Export failed");
+    }
+  };
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [contextMenu]);
 
   if (collapsed) {
     return (
@@ -200,6 +236,10 @@ export default function ProjectSidebar() {
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") handleSelectProject(project);
             }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY, project });
+            }}
             className={`group flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left transition-colors ${
               activeProject?.id === project.id
                 ? "bg-neutral-200/70 text-neutral-900 dark:bg-neutral-800/70 dark:text-neutral-100"
@@ -225,6 +265,33 @@ export default function ProjectSidebar() {
           </div>
         ))}
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 min-w-35 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={() => handleExportZip(contextMenu.project)}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export as ZIP
+          </button>
+          <button
+            onClick={(e) => {
+              setContextMenu(null);
+              handleRemoveProject(e, contextMenu.project);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete project
+          </button>
+        </div>
+      )}
     </div>
   );
 }
