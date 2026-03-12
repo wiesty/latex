@@ -1,7 +1,6 @@
 services:
   latex-editor:
     image: ghcr.io/wiesty/latex:latest
-    # Or build locally:
     # build: .
     ports:
       - "3107:3107"

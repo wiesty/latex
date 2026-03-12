@@ -14,6 +14,9 @@ RUN npm run build
 # --- Production stage ---
 FROM node:24-alpine AS runner
 
+ARG BUILD_DATE
+ENV BUILD_DATE=${BUILD_DATE}
+
 LABEL org.opencontainers.image.source=https://github.com/wiesty/latex
 LABEL org.opencontainers.image.description="Self-hosted browser-based LaTeX editor"
 LABEL org.opencontainers.image.licenses=MIT
@@ -40,6 +43,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/startup.js ./startup.js
 
 # Create default directories
 RUN mkdir -p /data/config /projects && chown nextjs:nodejs /data/config /projects
@@ -48,4 +52,4 @@ USER nextjs
 
 EXPOSE 3107
 
-CMD ["node", "server.js"]
+CMD ["node", "startup.js"]
