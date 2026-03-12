@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import FileEntryItem from "./FileEntryItem";
 
 export default function FileTree() {
-  const { activeProject, activeFile, openFile, showFileTree, toggleFileTree, mainFile, setMainFile } =
+  const { activeProject, activeFile, openFile, showFileTree, toggleFileTree, mainFile, setMainFile, showHidden, setShowHidden } =
     useEditorStore();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [showNewFile, setShowNewFile] = useState(false);
@@ -23,7 +23,6 @@ export default function FileTree() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
@@ -231,7 +230,7 @@ export default function FileTree() {
         </span>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setShowHidden((v) => !v)}
+            onClick={() => setShowHidden(!showHidden)}
             className={`rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${showHidden ? "text-blue-500" : ""}`}
             title={showHidden ? "Hide hidden files" : "Show hidden files"}
           >

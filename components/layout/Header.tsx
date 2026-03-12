@@ -44,14 +44,18 @@ export default function Header() {
     // Save current file first
     if (activeFile) {
       const content = fileContent[activeFile.path];
+      const savedPath = activeFile.path;
       if (content !== undefined) {
         try {
           await fetch("/api/files", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path: activeFile.path, content }),
+            body: JSON.stringify({ path: savedPath, content }),
           });
-          markFileSaved(activeFile.path);
+          // Only mark as saved if content hasn't changed while the request was in-flight
+          if (useEditorStore.getState().fileContent[savedPath] === content) {
+            markFileSaved(savedPath);
+          }
         } catch {
           toast.error("Failed to save file");
           return;

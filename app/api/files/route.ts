@@ -59,7 +59,21 @@ export async function DELETE(request: NextRequest) {
 
   // Only allow deleting recognized file types
   const ext = path.extname(filePath).toLowerCase();
-  const allowedExtensions = [".tex", ".bib", ".sty", ".cls", ".bst", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".eps", ".pdf", ".tikz", ".pgf", ".csv", ".dat", ".txt", ".md"];
+  const allowedExtensions = [
+    // Source files
+    ".tex", ".bib", ".sty", ".cls", ".bst",
+    // Images & assets
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".eps", ".pdf",
+    // Other source formats
+    ".tikz", ".pgf", ".csv", ".dat", ".txt", ".md",
+    // LaTeX build artifacts (visible when "show hidden files" is enabled)
+    ".aux", ".log", ".out", ".toc", ".lof", ".lot",
+    ".fls", ".fdb_latexmk", ".synctex.gz", ".synctex",
+    ".bbl", ".blg", ".bcf", ".run.xml",
+    ".nav", ".snm", ".vrb", ".idx", ".ind", ".ilg",
+    ".glg", ".glo", ".gls", ".ist",
+    ".dvi", ".xdv",
+  ];
   if (!allowedExtensions.includes(ext)) {
     return NextResponse.json(
       { error: `File type ${ext} cannot be deleted` },

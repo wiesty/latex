@@ -77,13 +77,17 @@ export default function MonacoEditor() {
     const content = fileContent[activeFile.path];
     if (content === undefined) return;
 
+    const savedPath = activeFile.path;
     try {
       await fetch("/api/files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: activeFile.path, content }),
+        body: JSON.stringify({ path: savedPath, content }),
       });
-      markFileSaved(activeFile.path);
+      // Only mark as saved if the user hasn't typed more while the request was in-flight
+      if (useEditorStore.getState().fileContent[savedPath] === content) {
+        markFileSaved(savedPath);
+      }
 
       // Trigger compile
       setCompileStatus("compiling");
@@ -202,6 +206,9 @@ export default function MonacoEditor() {
   const handleChange = useCallback(
     (value: string | undefined) => {
       if (!activeFile || value === undefined || readOnly) return;
+      // Skip if value matches stored content (e.g. from external reload)
+      const current = useEditorStore.getState().fileContent[activeFile.path];
+      if (value === current) return;
       setFileContent(activeFile.path, value);
       markFileUnsaved(activeFile.path);
 

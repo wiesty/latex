@@ -16,64 +16,76 @@ interface WatchEvent {
   message?: string;
 }
 
+const COMPILE_COOLDOWN_MS = 5000; // Minimum 5s between auto-compiles
+
 export function useFileWatcher() {
   const {
-    activeProject,
-    openFiles,
-    fileContent,
     setFileContent,
-    mainFile,
-    compileStatus,
     setCompileStatus,
     setCompileResult,
     setPdfTimestamp,
     setExternalChangeIndicator,
-    autoCompile,
   } = useEditorStore();
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const compileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCompilingRef = useRef(false);
-  const autoCompileRef = useRef(autoCompile);
+  const lastCompileEndRef = useRef(0);
+  const handleChangesRef = useRef<(files: FileChange[]) => void>(() => {});
 
-  // Keep refs in sync
+  // Keep compiling ref in sync
+  const compileStatus = useEditorStore((s) => s.compileStatus);
+  const activeProject = useEditorStore((s) => s.activeProject);
   useEffect(() => {
     isCompilingRef.current = compileStatus === "compiling";
   }, [compileStatus]);
 
-  useEffect(() => {
-    autoCompileRef.current = autoCompile;
-  }, [autoCompile]);
-
+  // Reload an open file, returning true if content actually changed.
+  // Never overwrites files the user is currently editing (unsaved changes).
   const reloadOpenFile = useCallback(
-    async (filePath: string) => {
-      // Only reload if file is currently open and has content loaded
-      if (fileContent[filePath] === undefined) return;
+    async (filePath: string): Promise<boolean> => {
+      const state = useEditorStore.getState();
+      const currentContent = state.fileContent[filePath];
+      if (currentContent === undefined) return false;
+
+      // Don't touch files with unsaved user changes — the user is still editing.
+      const fileTab = state.openFiles.find((f) => f.path === filePath);
+      if (fileTab?.unsaved) return false;
 
       try {
         const res = await fetch(
           `/api/files?path=${encodeURIComponent(filePath)}`
         );
         const data = await res.json();
-        if (data.content !== undefined) {
+        if (data.content !== undefined && data.content !== currentContent) {
           setFileContent(filePath, data.content);
+          return true;
         }
+        return false;
       } catch {
-        // silently fail — file may have been deleted
+        return false;
       }
     },
-    [fileContent, setFileContent]
+    [setFileContent]
   );
 
   const triggerCompile = useCallback(async () => {
-    if (!activeProject || isCompilingRef.current) return;
+    const state = useEditorStore.getState();
+    if (!state.activeProject || isCompilingRef.current) return;
+
+    // Cooldown: don't auto-compile too frequently
+    const now = Date.now();
+    if (now - lastCompileEndRef.current < COMPILE_COOLDOWN_MS) return;
 
     setCompileStatus("compiling");
     try {
       const res = await fetch("/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath: activeProject.path, mainFile: mainFile ?? undefined }),
+        body: JSON.stringify({
+          projectPath: state.activeProject.path,
+          mainFile: state.mainFile ?? undefined,
+        }),
       });
       const result = await res.json();
 
@@ -93,31 +105,39 @@ export function useFileWatcher() {
       setPdfTimestamp(Date.now());
     } catch {
       setCompileStatus("error");
+    } finally {
+      lastCompileEndRef.current = Date.now();
     }
-  }, [activeProject, mainFile, setCompileStatus, setCompileResult, setPdfTimestamp]);
+  }, [setCompileStatus, setCompileResult, setPdfTimestamp]);
 
+  // handleChanges reads latest state directly from store to avoid stale closures
   const handleChanges = useCallback(
-    (files: FileChange[]) => {
-      if (!activeProject) return;
+    async (files: FileChange[]) => {
+      const state = useEditorStore.getState();
+      if (!state.activeProject) return;
 
       const textExts = new Set([
         "tex", "bib", "sty", "cls", "bst", "tikz", "pgf", "csv", "dat", "txt", "md",
       ]);
+      const compileExts = new Set(["tex", "bib", "sty", "cls", "bst"]);
 
-      // Reload any open files that changed
-      const openPaths = new Set(openFiles.map((f) => f.path));
-      let hasTexChanges = false;
+      const openPaths = new Set(state.openFiles.map((f) => f.path));
+      let hasRealTexChanges = false;
+      let hasExternalContentChange = false;
 
       for (const file of files) {
         const ext = file.name.split(".").pop()?.toLowerCase() || "";
 
         if (openPaths.has(file.path) && textExts.has(ext)) {
-          reloadOpenFile(file.path);
-        }
-
-        // Check if any .tex or .bib files changed (triggers recompile)
-        if (["tex", "bib", "sty", "cls", "bst"].includes(ext)) {
-          hasTexChanges = true;
+          // Reload and check if content actually changed
+          const changed = await reloadOpenFile(file.path);
+          if (changed && compileExts.has(ext)) {
+            hasRealTexChanges = true;
+            hasExternalContentChange = true;
+          }
+        } else if (compileExts.has(ext)) {
+          // File not open — assume genuine change
+          hasRealTexChanges = true;
         }
       }
 
@@ -128,18 +148,23 @@ export function useFileWatcher() {
         `${changedNames.join(", ")}${suffix}`
       );
 
-      // Debounced recompile (3s after last change)
-      if (hasTexChanges && autoCompileRef.current) {
+      // Debounced recompile (3s after last change) — only if actual content changed
+      if (hasRealTexChanges && state.autoCompile) {
         if (compileTimerRef.current) clearTimeout(compileTimerRef.current);
         compileTimerRef.current = setTimeout(() => {
           triggerCompile();
         }, 3000);
       }
     },
-    [activeProject, openFiles, reloadOpenFile, triggerCompile, setExternalChangeIndicator]
+    [reloadOpenFile, triggerCompile, setExternalChangeIndicator]
   );
 
-  // Connect/disconnect SSE
+  // Keep ref in sync for SSE handler
+  useEffect(() => {
+    handleChangesRef.current = handleChanges;
+  }, [handleChanges]);
+
+  // Connect/disconnect SSE — only depends on activeProject
   useEffect(() => {
     if (!activeProject) {
       if (eventSourceRef.current) {
@@ -162,7 +187,7 @@ export function useFileWatcher() {
       try {
         const data: WatchEvent = JSON.parse(event.data);
         if (data.type === "changes" && data.files) {
-          handleChanges(data.files);
+          handleChangesRef.current(data.files);
         } else if (data.type === "error") {
           toast.error(`File watcher: ${data.message}`);
         }
@@ -180,5 +205,5 @@ export function useFileWatcher() {
       eventSourceRef.current = null;
       if (compileTimerRef.current) clearTimeout(compileTimerRef.current);
     };
-  }, [activeProject, handleChanges]);
+  }, [activeProject]);
 }

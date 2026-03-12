@@ -69,6 +69,10 @@ interface EditorStore {
   setAutoCompile: (v: boolean) => void;
   autoScroll: boolean;
   setAutoScroll: (v: boolean) => void;
+  showHidden: boolean;
+  setShowHidden: (v: boolean) => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (v: boolean) => void;
 
   // Cursor
   cursorLine: number;
@@ -172,25 +176,65 @@ export const useEditorStore = create<EditorStore>((set) => ({
   pdfTimestamp: Date.now(),
   setPdfTimestamp: (t) => set({ pdfTimestamp: t }),
 
-  // UI
-  showFileTree: true,
-  showLogPanel: false,
-  showPDF: true,
-  editorFontSize: 14,
-  pdfZoom: 1,
+  // UI (all persisted to localStorage)
+  showFileTree: typeof window !== "undefined"
+    ? localStorage.getItem("showFileTree") !== "false"
+    : true,
+  showLogPanel: typeof window !== "undefined"
+    ? localStorage.getItem("showLogPanel") === "true"
+    : false,
+  showPDF: typeof window !== "undefined"
+    ? localStorage.getItem("showPDF") !== "false"
+    : true,
+  editorFontSize: typeof window !== "undefined"
+    ? parseInt(localStorage.getItem("editorFontSize") || "14", 10)
+    : 14,
+  pdfZoom: typeof window !== "undefined"
+    ? parseFloat(localStorage.getItem("pdfZoom") || "1")
+    : 1,
   currentPDFPage: 1,
   totalPDFPages: 0,
-  toggleFileTree: () => set((s) => ({ showFileTree: !s.showFileTree })),
-  toggleLogPanel: () => set((s) => ({ showLogPanel: !s.showLogPanel })),
-  togglePDF: () => set((s) => ({ showPDF: !s.showPDF })),
-  setEditorFontSize: (size) => set({ editorFontSize: size }),
-  setPdfZoom: (zoom) => set({ pdfZoom: zoom }),
+  toggleFileTree: () => set((s) => {
+    const v = !s.showFileTree;
+    if (typeof window !== "undefined") localStorage.setItem("showFileTree", String(v));
+    return { showFileTree: v };
+  }),
+  toggleLogPanel: () => set((s) => {
+    const v = !s.showLogPanel;
+    if (typeof window !== "undefined") localStorage.setItem("showLogPanel", String(v));
+    return { showLogPanel: v };
+  }),
+  togglePDF: () => set((s) => {
+    const v = !s.showPDF;
+    if (typeof window !== "undefined") localStorage.setItem("showPDF", String(v));
+    return { showPDF: v };
+  }),
+  setEditorFontSize: (size) => {
+    if (typeof window !== "undefined") localStorage.setItem("editorFontSize", String(size));
+    set({ editorFontSize: size });
+  },
+  setPdfZoom: (zoom) => {
+    if (typeof window !== "undefined") localStorage.setItem("pdfZoom", String(zoom));
+    set({ pdfZoom: zoom });
+  },
   setCurrentPDFPage: (page) => set({ currentPDFPage: page }),
   setTotalPDFPages: (total) => set({ totalPDFPages: total }),
-  showMinimap: false,
-  toggleMinimap: () => set((s) => ({ showMinimap: !s.showMinimap })),
-  wordWrap: true,
-  toggleWordWrap: () => set((s) => ({ wordWrap: !s.wordWrap })),
+  showMinimap: typeof window !== "undefined"
+    ? localStorage.getItem("showMinimap") === "true"
+    : false,
+  toggleMinimap: () => set((s) => {
+    const v = !s.showMinimap;
+    if (typeof window !== "undefined") localStorage.setItem("showMinimap", String(v));
+    return { showMinimap: v };
+  }),
+  wordWrap: typeof window !== "undefined"
+    ? localStorage.getItem("wordWrap") !== "false"
+    : true,
+  toggleWordWrap: () => set((s) => {
+    const v = !s.wordWrap;
+    if (typeof window !== "undefined") localStorage.setItem("wordWrap", String(v));
+    return { wordWrap: v };
+  }),
   autoCompile: typeof window !== "undefined"
     ? localStorage.getItem("autoCompile") !== "false"
     : true,
@@ -204,6 +248,20 @@ export const useEditorStore = create<EditorStore>((set) => ({
   setAutoScroll: (v) => {
     if (typeof window !== "undefined") localStorage.setItem("autoScroll", String(v));
     set({ autoScroll: v });
+  },
+  showHidden: typeof window !== "undefined"
+    ? localStorage.getItem("showHidden") === "true"
+    : false,
+  setShowHidden: (v) => {
+    if (typeof window !== "undefined") localStorage.setItem("showHidden", String(v));
+    set({ showHidden: v });
+  },
+  sidebarCollapsed: typeof window !== "undefined"
+    ? localStorage.getItem("sidebarCollapsed") === "true"
+    : false,
+  setSidebarCollapsed: (v) => {
+    if (typeof window !== "undefined") localStorage.setItem("sidebarCollapsed", String(v));
+    set({ sidebarCollapsed: v });
   },
 
   // Cursor

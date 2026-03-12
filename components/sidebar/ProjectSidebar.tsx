@@ -19,8 +19,9 @@ export default function ProjectSidebar() {
     activeProject,
     setProjects,
     setActiveProject,
+    sidebarCollapsed: collapsed,
+    setSidebarCollapsed: setCollapsed,
   } = useEditorStore();
-  const [collapsed, setCollapsed] = useState(false);
   const [showAddInput, setShowAddInput] = useState(false);
   const [newName, setNewName] = useState("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; project: Project } | null>(null);
