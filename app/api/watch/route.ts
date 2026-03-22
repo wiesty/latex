@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
 
       const handleChange = (eventType: string, filename: string | null) => {
         if (!filename || closed) return;
+        const normalized = filename.toLowerCase();
         const ext = path.extname(filename).toLowerCase();
 
         // Ignore build artifacts
@@ -82,6 +83,11 @@ export async function GET(request: NextRequest) {
 
         // Ignore hidden files
         if (filename.startsWith(".")) return;
+
+        // Ignore temporary/lock artifacts created by editors or build tools
+        if (normalized.includes(".busy") || normalized.endsWith("~") || normalized.endsWith(".tmp")) {
+          return;
+        }
 
         const fullPath = path.join(projectPath, filename);
         pendingChanges.set(fullPath, eventType);

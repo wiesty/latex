@@ -17,6 +17,7 @@ interface WatchEvent {
 }
 
 const COMPILE_COOLDOWN_MS = 5000; // Minimum 5s between auto-compiles
+const INTERNAL_WRITE_IGNORE_MS = 2500;
 
 export function useFileWatcher() {
   const {
@@ -95,8 +96,14 @@ export function useFileWatcher() {
       const openPaths = new Set(state.openFiles.map((f) => f.path));
       const pendingReloadFiles: Array<{ path: string; name: string }> = [];
       let hasRealTexChanges = false;
+      const now = Date.now();
 
       for (const file of files) {
+        const lastInternalWrite = state.internalWriteTimestamps[file.path] ?? 0;
+        if (now - lastInternalWrite < INTERNAL_WRITE_IGNORE_MS) {
+          continue;
+        }
+
         const ext = file.name.split(".").pop()?.toLowerCase() || "";
 
         if (openPaths.has(file.path) && textExts.has(ext)) {
@@ -111,6 +118,8 @@ export function useFileWatcher() {
       if (pendingReloadFiles.length > 0) {
         setPendingExternalChanges(pendingReloadFiles);
       }
+
+      if (pendingReloadFiles.length === 0 && !hasRealTexChanges) return;
 
       // Show indicator
       const changedNames = files.map((f) => f.name).slice(0, 3);

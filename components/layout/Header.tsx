@@ -41,10 +41,17 @@ export default function Header() {
     pendingExternalChanges,
     clearPendingExternalChanges,
     setFileContent,
+    markInternalWrite,
   } = useEditorStore();
   const { setTheme, resolvedTheme } = useTheme();
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const [showReloadModal, setShowReloadModal] = useState(false);
+  const uiHydrated = mounted;
+
+  // Keep first client render identical to SSR output to avoid hydration mismatches.
+  const autoCompileUI = uiHydrated ? autoCompile : true;
+  const autoSaveUI = uiHydrated ? autoSave : true;
+  const autoScrollUI = uiHydrated ? autoScroll : true;
 
   const compileProject = useCallback(async () => {
     if (!activeProject || compileStatus === "compiling") return false;
@@ -101,6 +108,7 @@ export default function Header() {
 
   const saveFile = useCallback(
     async (path: string, content: string) => {
+      markInternalWrite(path);
       await fetch("/api/files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,7 +118,7 @@ export default function Header() {
         markFileSaved(path);
       }
     },
-    [markFileSaved]
+    [markFileSaved, markInternalWrite]
   );
 
   const saveActiveFile = useCallback(async () => {
@@ -120,14 +128,16 @@ export default function Header() {
 
     try {
       await saveFile(activeFile.path, content);
-      toast.success("Datei gespeichert");
-      await compileProject();
+      toast.success("File saved");
+      if (autoCompile) {
+        await compileProject();
+      }
       return true;
     } catch {
-      toast.error("Speichern fehlgeschlagen");
+      toast.error("Save failed");
       return false;
     }
-  }, [activeFile, fileContent, saveFile, compileProject]);
+  }, [activeFile, fileContent, saveFile, autoCompile, compileProject]);
 
   const saveUnsavedOpenFiles = useCallback(async () => {
     const state = useEditorStore.getState();
@@ -141,19 +151,19 @@ export default function Header() {
           await saveFile(file.path, content);
         }
       }
-      toast.success(`${unsavedFiles.length} Datei(en) gespeichert`);
+      toast.success(`${unsavedFiles.length} file(s) saved`);
       return true;
     } catch {
-      toast.error("Speichern vor Reload fehlgeschlagen");
+      toast.error("Failed to save before reload");
       return false;
     }
   }, [saveFile]);
 
-  const reloadPendingFiles = useCallback(async () => {
-    if (pendingExternalChanges.length === 0) return;
+  const reloadPendingFiles = useCallback(async (filesToReload: Array<{ path: string; name: string }>) => {
+    if (filesToReload.length === 0) return;
 
     try {
-      for (const file of pendingExternalChanges) {
+      for (const file of filesToReload) {
         const res = await fetch(`/api/files?path=${encodeURIComponent(file.path)}`);
         const data = await res.json();
         if (data.content !== undefined) {
@@ -162,23 +172,28 @@ export default function Header() {
         }
       }
       clearPendingExternalChanges();
-      toast.success("Externe Änderungen wurden geladen");
+      toast.success("External changes reloaded");
     } catch {
-      toast.error("Reload fehlgeschlagen");
+      toast.error("Reload failed");
     }
-  }, [pendingExternalChanges, clearPendingExternalChanges, setFileContent, markFileSaved]);
+  }, [clearPendingExternalChanges, setFileContent, markFileSaved]);
 
   const handleReloadConfirm = useCallback(
     async (saveBeforeReload: boolean) => {
+      const filesToReload = [...pendingExternalChanges];
+
       if (saveBeforeReload) {
         const saved = await saveUnsavedOpenFiles();
         if (!saved) return;
       }
-      await reloadPendingFiles();
-      await compileProject();
+
+      // Close immediately to avoid rendering an empty modal while async work runs.
       setShowReloadModal(false);
+
+      await reloadPendingFiles(filesToReload);
+      await compileProject();
     },
-    [saveUnsavedOpenFiles, reloadPendingFiles, compileProject]
+    [pendingExternalChanges, saveUnsavedOpenFiles, reloadPendingFiles, compileProject]
   );
 
   const handleCompile = useCallback(async () => {
@@ -263,17 +278,17 @@ export default function Header() {
           <div className="flex items-center gap-1.5">
             <button
               role="switch"
-              aria-checked={autoCompile}
+              aria-checked={autoCompileUI}
               aria-label="Toggle auto compile"
               onClick={() => setAutoCompile(!autoCompile)}
               disabled={!activeProject}
               className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 ${
-                autoCompile ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+                autoCompileUI ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
               }`}
             >
               <span
                 className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
-                  autoCompile ? "translate-x-3.5" : "translate-x-0.5"
+                  autoCompileUI ? "translate-x-3.5" : "translate-x-0.5"
                 }`}
               />
             </button>
@@ -287,17 +302,17 @@ export default function Header() {
           <div className="flex items-center gap-1.5">
             <button
               role="switch"
-              aria-checked={autoSave}
+              aria-checked={autoSaveUI}
               aria-label="Toggle auto save"
               onClick={() => setAutoSave(!autoSave)}
               disabled={!activeProject}
               className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 ${
-                autoSave ? "bg-emerald-500" : "bg-neutral-300 dark:bg-neutral-600"
+                autoSaveUI ? "bg-emerald-500" : "bg-neutral-300 dark:bg-neutral-600"
               }`}
             >
               <span
                 className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
-                  autoSave ? "translate-x-3.5" : "translate-x-0.5"
+                  autoSaveUI ? "translate-x-3.5" : "translate-x-0.5"
                 }`}
               />
             </button>
@@ -311,29 +326,29 @@ export default function Header() {
           <div className="flex items-center gap-1.5">
             <button
               role="switch"
-              aria-checked={autoScroll}
+              aria-checked={autoScrollUI}
               aria-label="Toggle auto scroll"
               onClick={() => setAutoScroll(!autoScroll)}
               disabled={!activeProject}
               className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 ${
-                autoScroll ? "bg-blue-500" : "bg-neutral-300 dark:bg-neutral-600"
+                autoScrollUI ? "bg-blue-500" : "bg-neutral-300 dark:bg-neutral-600"
               }`}
             >
               <span
                 className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
-                  autoScroll ? "translate-x-3.5" : "translate-x-0.5"
+                  autoScrollUI ? "translate-x-3.5" : "translate-x-0.5"
                 }`}
               />
             </button>
             <span className="text-xs text-neutral-400">Scroll</span>
           </div>
         </HeaderTooltip>
-        {!autoSave && (
+        {!autoSaveUI && (
           <button
             onClick={saveActiveFile}
             disabled={!activeProject || !activeFile || compileStatus === "compiling"}
             className="flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-700/60 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
-            title="Manuell speichern"
+            title="Save file"
           >
             <Save className="h-3 w-3" />
             Save
@@ -344,7 +359,7 @@ export default function Header() {
             onClick={() => setShowReloadModal(true)}
             disabled={!activeProject}
             className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-40 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
-            title="Externe Änderungen laden"
+            title="Reload external changes"
           >
             <RefreshCw className="h-3 w-3" />
             Reload ({pendingExternalChanges.length})
@@ -410,11 +425,11 @@ export default function Header() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-4 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-              Externe Änderungen erkannt
+              External changes detected
             </h2>
             <p className="mt-2 text-xs leading-relaxed text-neutral-600 dark:text-neutral-300">
-              Für {pendingExternalChanges.length} Datei(en) wurden Änderungen von außen erkannt.
-              Möchtest du vor dem Reload zuerst speichern, damit keine lokalen Änderungen verloren gehen?
+              Changes were detected in {pendingExternalChanges.length} file(s).
+              Do you want to save before reload to avoid losing local edits?
             </p>
             <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
               {pendingExternalChanges.slice(0, 5).map((file) => (
@@ -422,7 +437,7 @@ export default function Header() {
               ))}
               {pendingExternalChanges.length > 5 && (
                 <div className="text-neutral-500 dark:text-neutral-400">
-                  +{pendingExternalChanges.length - 5} weitere
+                  +{pendingExternalChanges.length - 5} more
                 </div>
               )}
             </div>
@@ -431,19 +446,19 @@ export default function Header() {
                 onClick={() => setShowReloadModal(false)}
                 className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
-                Abbrechen
+                Cancel
               </button>
               <button
                 onClick={() => handleReloadConfirm(false)}
-                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300"
+                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/45"
               >
-                Reload ohne Speichern
+                Reload without saving
               </button>
               <button
                 onClick={() => handleReloadConfirm(true)}
                 className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
               >
-                Speichern & Reloaden
+                Save and reload
               </button>
             </div>
           </div>

@@ -19,10 +19,12 @@ export default function MonacoEditor() {
     setFileContent,
     markFileUnsaved,
     markFileSaved,
+    markInternalWrite,
     setCursorPosition,
     setCurrentPDFPage,
     autoScroll,
     autoSave,
+    autoCompile,
     editorFontSize,
     showMinimap,
     wordWrap,
@@ -81,6 +83,7 @@ export default function MonacoEditor() {
 
       const savedPath = activeFile.path;
       try {
+        markInternalWrite(savedPath);
         await fetch("/api/files", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -90,14 +93,14 @@ export default function MonacoEditor() {
         if (useEditorStore.getState().fileContent[savedPath] === content) {
           markFileSaved(savedPath);
         }
-        if (showSuccessToast) toast.success("Datei gespeichert");
+        if (showSuccessToast) toast.success("File saved");
         return true;
       } catch {
         toast.error("Failed to save file");
         return false;
       }
     },
-    [activeFile, fileContent, markFileSaved]
+    [activeFile, fileContent, markFileSaved, markInternalWrite]
   );
 
   const handleSaveAndCompile = useCallback(async () => {
@@ -105,6 +108,7 @@ export default function MonacoEditor() {
 
     const saved = await persistActiveFile(false);
     if (!saved) return;
+    if (!autoCompile) return;
 
     try {
       // Trigger compile
@@ -148,6 +152,7 @@ export default function MonacoEditor() {
     activeFile,
     activeProject,
     mainFile,
+    autoCompile,
     persistActiveFile,
     setCompileStatus,
     setCompileResult,

@@ -87,6 +87,8 @@ interface EditorStore {
   pendingExternalChanges: Array<{ path: string; name: string }>;
   setPendingExternalChanges: (files: Array<{ path: string; name: string }>) => void;
   clearPendingExternalChanges: () => void;
+  internalWriteTimestamps: Record<string, number>;
+  markInternalWrite: (path: string) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -299,4 +301,17 @@ export const useEditorStore = create<EditorStore>((set) => ({
     }),
   clearPendingExternalChanges: () =>
     set({ pendingExternalChanges: [], externalChangeIndicator: null }),
+  internalWriteTimestamps: {},
+  markInternalWrite: (path) =>
+    set((state) => {
+      const now = Date.now();
+      const pruned: Record<string, number> = {};
+      for (const [key, ts] of Object.entries(state.internalWriteTimestamps)) {
+        if (now - ts < 15000) {
+          pruned[key] = ts;
+        }
+      }
+      pruned[path] = now;
+      return { internalWriteTimestamps: pruned };
+    }),
 }));
