@@ -67,6 +67,8 @@ interface EditorStore {
   toggleWordWrap: () => void;
   autoCompile: boolean;
   setAutoCompile: (v: boolean) => void;
+  autoSave: boolean;
+  setAutoSave: (v: boolean) => void;
   autoScroll: boolean;
   setAutoScroll: (v: boolean) => void;
   showHidden: boolean;
@@ -82,6 +84,9 @@ interface EditorStore {
   // File watcher
   externalChangeIndicator: string | null;
   setExternalChangeIndicator: (msg: string | null) => void;
+  pendingExternalChanges: Array<{ path: string; name: string }>;
+  setPendingExternalChanges: (files: Array<{ path: string; name: string }>) => void;
+  clearPendingExternalChanges: () => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -242,6 +247,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
     if (typeof window !== "undefined") localStorage.setItem("autoCompile", String(v));
     set({ autoCompile: v });
   },
+  autoSave: typeof window !== "undefined"
+    ? localStorage.getItem("autoSave") !== "false"
+    : true,
+  setAutoSave: (v) => {
+    if (typeof window !== "undefined") localStorage.setItem("autoSave", String(v));
+    set({ autoSave: v });
+  },
   autoScroll: typeof window !== "undefined"
     ? localStorage.getItem("autoScroll") !== "false"
     : true,
@@ -273,4 +285,18 @@ export const useEditorStore = create<EditorStore>((set) => ({
   // File watcher
   externalChangeIndicator: null,
   setExternalChangeIndicator: (msg) => set({ externalChangeIndicator: msg }),
+  pendingExternalChanges: [],
+  setPendingExternalChanges: (files) =>
+    set((state) => {
+      const merged = new Map<string, { path: string; name: string }>();
+      for (const file of state.pendingExternalChanges) {
+        merged.set(file.path, file);
+      }
+      for (const file of files) {
+        merged.set(file.path, file);
+      }
+      return { pendingExternalChanges: Array.from(merged.values()) };
+    }),
+  clearPendingExternalChanges: () =>
+    set({ pendingExternalChanges: [], externalChangeIndicator: null }),
 }));

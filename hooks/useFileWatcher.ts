@@ -20,11 +20,11 @@ const COMPILE_COOLDOWN_MS = 5000; // Minimum 5s between auto-compiles
 
 export function useFileWatcher() {
   const {
-    setFileContent,
     setCompileStatus,
     setCompileResult,
     setPdfTimestamp,
     setExternalChangeIndicator,
+    setPendingExternalChanges,
   } = useEditorStore();
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -39,35 +39,6 @@ export function useFileWatcher() {
   useEffect(() => {
     isCompilingRef.current = compileStatus === "compiling";
   }, [compileStatus]);
-
-  // Reload an open file, returning true if content actually changed.
-  // Never overwrites files the user is currently editing (unsaved changes).
-  const reloadOpenFile = useCallback(
-    async (filePath: string): Promise<boolean> => {
-      const state = useEditorStore.getState();
-      const currentContent = state.fileContent[filePath];
-      if (currentContent === undefined) return false;
-
-      // Don't touch files with unsaved user changes — the user is still editing.
-      const fileTab = state.openFiles.find((f) => f.path === filePath);
-      if (fileTab?.unsaved) return false;
-
-      try {
-        const res = await fetch(
-          `/api/files?path=${encodeURIComponent(filePath)}`
-        );
-        const data = await res.json();
-        if (data.content !== undefined && data.content !== currentContent) {
-          setFileContent(filePath, data.content);
-          return true;
-        }
-        return false;
-      } catch {
-        return false;
-      }
-    },
-    [setFileContent]
-  );
 
   const triggerCompile = useCallback(async () => {
     const state = useEditorStore.getState();
@@ -112,7 +83,7 @@ export function useFileWatcher() {
 
   // handleChanges reads latest state directly from store to avoid stale closures
   const handleChanges = useCallback(
-    async (files: FileChange[]) => {
+    (files: FileChange[]) => {
       const state = useEditorStore.getState();
       if (!state.activeProject) return;
 
@@ -122,31 +93,29 @@ export function useFileWatcher() {
       const compileExts = new Set(["tex", "bib", "sty", "cls", "bst"]);
 
       const openPaths = new Set(state.openFiles.map((f) => f.path));
+      const pendingReloadFiles: Array<{ path: string; name: string }> = [];
       let hasRealTexChanges = false;
-      let hasExternalContentChange = false;
 
       for (const file of files) {
         const ext = file.name.split(".").pop()?.toLowerCase() || "";
 
         if (openPaths.has(file.path) && textExts.has(ext)) {
-          // Reload and check if content actually changed
-          const changed = await reloadOpenFile(file.path);
-          if (changed && compileExts.has(ext)) {
-            hasRealTexChanges = true;
-            hasExternalContentChange = true;
-          }
+          pendingReloadFiles.push({ path: file.path, name: file.name });
+          if (compileExts.has(ext)) hasRealTexChanges = true;
         } else if (compileExts.has(ext)) {
           // File not open — assume genuine change
           hasRealTexChanges = true;
         }
       }
 
+      if (pendingReloadFiles.length > 0) {
+        setPendingExternalChanges(pendingReloadFiles);
+      }
+
       // Show indicator
       const changedNames = files.map((f) => f.name).slice(0, 3);
       const suffix = files.length > 3 ? ` +${files.length - 3} weitere` : "";
-      setExternalChangeIndicator(
-        `${changedNames.join(", ")}${suffix}`
-      );
+      setExternalChangeIndicator(`${changedNames.join(", ")}${suffix}`);
 
       // Debounced recompile (3s after last change) — only if actual content changed
       if (hasRealTexChanges && state.autoCompile) {
@@ -156,7 +125,7 @@ export function useFileWatcher() {
         }, 3000);
       }
     },
-    [reloadOpenFile, triggerCompile, setExternalChangeIndicator]
+    [triggerCompile, setExternalChangeIndicator, setPendingExternalChanges]
   );
 
   // Keep ref in sync for SSE handler

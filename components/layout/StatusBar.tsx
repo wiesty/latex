@@ -1,7 +1,6 @@
 "use client";
 
 import { useEditorStore } from "@/store/editorStore";
-import { useEffect, useRef } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -26,21 +25,7 @@ export default function StatusBar() {
     toggleLogPanel,
     showLogPanel,
     externalChangeIndicator,
-    setExternalChangeIndicator,
   } = useEditorStore();
-
-  // Auto-clear external change indicator after 5s
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!externalChangeIndicator) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      setExternalChangeIndicator(null);
-    }, 5000);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [externalChangeIndicator, setExternalChangeIndicator]);
 
   return (
     <div className="flex h-7 items-center justify-between border-t border-neutral-200 bg-neutral-50 px-3 text-[11px] dark:border-neutral-800 dark:bg-neutral-950">

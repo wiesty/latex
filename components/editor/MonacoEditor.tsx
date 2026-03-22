@@ -22,6 +22,7 @@ export default function MonacoEditor() {
     setCursorPosition,
     setCurrentPDFPage,
     autoScroll,
+    autoSave,
     editorFontSize,
     showMinimap,
     wordWrap,
@@ -71,24 +72,41 @@ export default function MonacoEditor() {
     return () => { cancelled = true; };
   }, [activeFile, fileContent, setFileContent]);
 
+  const persistActiveFile = useCallback(
+    async (showSuccessToast = false) => {
+      if (!activeFile) return true;
+
+      const content = fileContent[activeFile.path];
+      if (content === undefined) return true;
+
+      const savedPath = activeFile.path;
+      try {
+        await fetch("/api/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: savedPath, content }),
+        });
+        // Only mark as saved if the user hasn't typed more while the request was in-flight
+        if (useEditorStore.getState().fileContent[savedPath] === content) {
+          markFileSaved(savedPath);
+        }
+        if (showSuccessToast) toast.success("Datei gespeichert");
+        return true;
+      } catch {
+        toast.error("Failed to save file");
+        return false;
+      }
+    },
+    [activeFile, fileContent, markFileSaved]
+  );
+
   const handleSaveAndCompile = useCallback(async () => {
     if (!activeFile || !activeProject) return;
 
-    const content = fileContent[activeFile.path];
-    if (content === undefined) return;
+    const saved = await persistActiveFile(false);
+    if (!saved) return;
 
-    const savedPath = activeFile.path;
     try {
-      await fetch("/api/files", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: savedPath, content }),
-      });
-      // Only mark as saved if the user hasn't typed more while the request was in-flight
-      if (useEditorStore.getState().fileContent[savedPath] === content) {
-        markFileSaved(savedPath);
-      }
-
       // Trigger compile
       setCompileStatus("compiling");
       const res = await fetch("/api/compile", {
@@ -130,8 +148,7 @@ export default function MonacoEditor() {
     activeFile,
     activeProject,
     mainFile,
-    fileContent,
-    markFileSaved,
+    persistActiveFile,
     setCompileStatus,
     setCompileResult,
     setPdfTimestamp,
@@ -169,7 +186,7 @@ export default function MonacoEditor() {
 
       // Cmd+S shortcut
       editor.addAction({
-        id: "save-and-compile",
+        id: "save-file",
         label: "Save and Compile",
         keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
         run: () => {
@@ -212,13 +229,15 @@ export default function MonacoEditor() {
       setFileContent(activeFile.path, value);
       markFileUnsaved(activeFile.path);
 
+      if (!autoSave) return;
+
       // Auto-save debounce
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         handleSaveAndCompile();
       }, 1500);
     },
-    [activeFile, readOnly, setFileContent, markFileUnsaved, handleSaveAndCompile]
+    [activeFile, readOnly, autoSave, setFileContent, markFileUnsaved, handleSaveAndCompile]
   );
 
   // Update error markers
