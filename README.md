@@ -2,10 +2,11 @@
 
 ![Preview](.github/preview.png)
 
-A self-hosted, browser-based LaTeX editor with live compilation and PDF preview — powered by Next.js and Monaco Editor. Run it on your local machine with docker. 
+A self-hosted, browser-based LaTeX editor with live compilation and PDF preview — powered by Next.js and Monaco Editor. Run it on your local machine with Docker.
 
-![Next.js](https://img.shields.io/badge/Next.js-16-black)
+![Next.js](https://img.shields.io/badge/Next.js-16.2-black)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+![Container](https://img.shields.io/badge/container-GHCR-blue)
 
 ## Features
 
@@ -48,6 +49,16 @@ docker run -d \
   ghcr.io/wiesty/latex:latest
 ```
 
+### Publishing
+
+Images are built by GitHub Actions and pushed to this repository's GitHub Container Registry package:
+
+```text
+ghcr.io/wiesty/latex
+```
+
+The workflow uses `GITHUB_TOKEN` with `packages: write` and OCI source labels so GHCR links the package back to this repository. Pull requests build the image without publishing; pushes to `main`, version tags, and manual workflow runs publish it.
+
 ---
 
 ## Why the volume mounts?
@@ -85,7 +96,7 @@ Stores editor state that should survive a container restart: the project list an
 
 ## Local Development
 
-**Prerequisites:** Node.js 20+, `pdflatex` (TeX Live / MacTeX)
+**Prerequisites:** Node.js 26+, `pdflatex` (TeX Live / MacTeX)
 
 ```bash
 git clone https://github.com/wiesty/latex.git

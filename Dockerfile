@@ -1,5 +1,7 @@
+ARG NODE_IMAGE=node:26-alpine
+
 # --- Build stage ---
-FROM node:24-alpine AS builder
+FROM ${NODE_IMAGE} AS builder
 
 WORKDIR /app
 
@@ -12,12 +14,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # --- Production stage ---
-FROM node:24-alpine AS runner
+FROM ${NODE_IMAGE} AS runner
 
 ARG BUILD_DATE
+ARG SOURCE_REPOSITORY=https://github.com/wiesty/latex
 ENV BUILD_DATE=${BUILD_DATE}
 
-LABEL org.opencontainers.image.source=https://github.com/wiesty/latex
+LABEL org.opencontainers.image.source=${SOURCE_REPOSITORY}
 LABEL org.opencontainers.image.description="Self-hosted browser-based LaTeX editor"
 LABEL org.opencontainers.image.licenses=MIT
 

@@ -17,7 +17,10 @@ import FileEntryItem from "./FileEntryItem";
 export default function FileTree() {
   const { activeProject, activeFile, openFile, showFileTree, toggleFileTree, mainFile, setMainFile, showHidden, setShowHidden } =
     useEditorStore();
-  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [fileState, setFileState] = useState<{
+    projectPath: string | null;
+    files: FileEntry[];
+  }>({ projectPath: null, files: [] });
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileName, setNewFileName] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
@@ -27,16 +30,22 @@ export default function FileTree() {
   const dragCounterRef = useRef(0);
 
   const refreshFiles = useCallback(() => setRefreshTick((t) => t + 1), []);
+  const files =
+    activeProject && fileState.projectPath === activeProject.path
+      ? fileState.files
+      : [];
 
   useEffect(() => {
-    setFiles([]);
     if (!activeProject) return;
     let cancelled = false;
+    const projectPath = activeProject.path;
     const url = `/api/projects?id=files&path=${encodeURIComponent(activeProject.path)}${showHidden ? "&showHidden=true" : ""}`;
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled) setFiles(data.files ?? []);
+        if (!cancelled) {
+          setFileState({ projectPath, files: data.files ?? [] });
+        }
       })
       .catch(() => {
         if (!cancelled) toast.error("Failed to load files");
