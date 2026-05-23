@@ -26,7 +26,7 @@ A self-hosted, browser-based LaTeX editor with live compilation and PDF preview 
 ```yaml
 services:
   latex-editor:
-    image: ghcr.io/wiesty/latex:latest
+    image: ghcr.io/wiesty/latex-editor:latest
     ports:
       - "3107:3107"
     volumes:
@@ -46,7 +46,7 @@ Open [http://localhost:3107](http://localhost:3107).
 docker run -d \
   -p 3107:3107 \
   -v /path/to/my-projects:/projects \
-  ghcr.io/wiesty/latex:latest
+  ghcr.io/wiesty/latex-editor:latest
 ```
 
 ### Publishing
@@ -54,7 +54,7 @@ docker run -d \
 Images are built by GitHub Actions and pushed to this repository's GitHub Container Registry package:
 
 ```text
-ghcr.io/wiesty/latex
+ghcr.io/wiesty/latex-editor
 ```
 
 The workflow uses `GITHUB_TOKEN` with `packages: write` and OCI source labels so GHCR links the package back to this repository. If GHCR rejects the built-in token with `write_package`, add a repository secret named `GHCR_TOKEN` with `read:packages` and `write:packages` scopes. Pull requests build the image without publishing; pushes to `main`, version tags, and manual workflow runs publish it.
