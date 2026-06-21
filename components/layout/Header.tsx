@@ -17,6 +17,7 @@ import { useTheme } from "next-themes";
 import { ReactNode, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import ExternalChangesModal from "./ExternalChangesModal";
+import SettingsModal from "./SettingsModal";
 
 const emptySubscribe = () => () => {};
 
@@ -50,6 +51,7 @@ export default function Header() {
   const { setTheme, resolvedTheme } = useTheme();
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const [showReloadModal, setShowReloadModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const uiHydrated = mounted;
 
   // Keep first client render identical to SSR output to avoid hydration mismatches.
@@ -453,6 +455,7 @@ export default function Header() {
             ))}
         </button>
         <button
+          onClick={() => setShowSettings(true)}
           className="rounded p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           title="Settings"
         >
@@ -469,6 +472,8 @@ export default function Header() {
           onAcceptExternal={acceptExternalChanges}
         />
       )}
+
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

@@ -3,6 +3,27 @@
 
 const originalLog = console.log;
 
+// Ensure a tlmgr user tree exists in TEXMFHOME (persistent volume) so the
+// non-root user can install additional TeX packages/fonts at runtime. Runs once
+// on first start (and after a fresh volume); idempotent and best-effort.
+function ensureTexUserTree() {
+  const texmfHome = process.env.TEXMFHOME;
+  if (!texmfHome) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execFileSync } = require("child_process");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    if (fs.existsSync(require("path").join(texmfHome, "web2c"))) return;
+    execFileSync("tlmgr", ["init-usertree"], { stdio: "ignore" });
+  } catch {
+    // tlmgr unavailable (e.g. local dev) — ignore
+  }
+}
+
+ensureTexUserTree();
+
 // Next.js default startup lines we want to suppress
 const SUPPRESS_PATTERNS = [
   /▲ Next\.js/,
@@ -42,6 +63,7 @@ function printBanner(timing) {
   const buildDate   = process.env.BUILD_DATE || "dev";
   const port        = process.env.PORT || "3107";
   const hostname    = process.env.HOSTNAME || "0.0.0.0";
+  const texHome     = process.env.TEXMFHOME;
 
   originalLog([
     "",
@@ -51,6 +73,7 @@ function printBanner(timing) {
     `  - Local:          http://localhost:${port}`,
     `  - Network:        http://${hostname}:${port}`,
     `  - Projects path:  ${projectsDir}`,
+    ...(texHome ? [`  - TeX packages:   ${texHome}`] : []),
     "",
     timing ? `  ✓ Ready in ${timing}` : "  ✓ Ready",
     "",

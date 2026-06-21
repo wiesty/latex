@@ -107,10 +107,10 @@ export default function MonacoEditor() {
     [activeFile, fileContent, markFileSaved, markInternalWrite]
   );
 
-  const handleSaveAndCompile = useCallback(async () => {
+  const handleSaveAndCompile = useCallback(async (showToast = false) => {
     if (!activeFile || !activeProject) return;
 
-    const saved = await persistActiveFile(false);
+    const saved = await persistActiveFile(showToast);
     if (!saved) return;
     if (!autoCompile) return;
 
@@ -202,7 +202,7 @@ export default function MonacoEditor() {
           monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyS,
         ],
         run: () => {
-          handleSaveAndCompile();
+          handleSaveAndCompile(true);
         },
       });
 
