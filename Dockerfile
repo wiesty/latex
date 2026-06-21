@@ -71,8 +71,14 @@ ENV LATEX_CONFIG_DIR=/data/config
 ENV LATEX_PROJECTS_DIR=/projects
 ENV PORT=3107
 ENV HOSTNAME=0.0.0.0
-# tlmgr user-mode tree on the persistent volume — survives container/image updates
+# A writable HOME so tools (and tlmgr) don't fall back to /nonexistent
+ENV HOME=/home/nextjs
+# tlmgr user-mode trees on the persistent volume — survive container/image
+# updates. TEXMFVAR/TEXMFCONFIG must be writable so font-map (updmap) and
+# format postactions succeed when installing Type1 font packages at runtime.
 ENV TEXMFHOME=/data/config/texmf
+ENV TEXMFVAR=/data/config/texmf-var
+ENV TEXMFCONFIG=/data/config/texmf-config
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
@@ -83,8 +89,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/startup.js ./startup.js
 
-# Create default directories (chown so the non-root user can write TEXMFHOME)
-RUN mkdir -p /data/config /projects && chown nextjs:nodejs /data/config /projects
+# Create default directories (chown so the non-root user can write its HOME and
+# the TEXMF trees on the volume)
+RUN mkdir -p /data/config /projects /home/nextjs && \
+    chown nextjs:nodejs /data/config /projects /home/nextjs
 
 USER nextjs
 

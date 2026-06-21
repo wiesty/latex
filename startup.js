@@ -14,6 +14,13 @@ function ensureTexUserTree() {
     const fs = require("fs");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { execFileSync } = require("child_process");
+
+    // Ensure the writable user TEXMF trees exist on the volume (needed so
+    // updmap/format postactions succeed for Type1 font packages).
+    for (const dir of [process.env.TEXMFVAR, process.env.TEXMFCONFIG]) {
+      if (dir) fs.mkdirSync(dir, { recursive: true });
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     if (fs.existsSync(require("path").join(texmfHome, "web2c"))) return;
     execFileSync("tlmgr", ["init-usertree"], { stdio: "ignore" });

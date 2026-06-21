@@ -69,6 +69,8 @@ Installs run via `tlmgr` in user mode and land in `TEXMFHOME` (`/data/config/tex
 
 > Note: installing packages requires the container to reach the internet (CTAN mirrors). The very first install of a large set can take a few minutes; afterwards everything is cached on the volume.
 
+Runtime installs cover LaTeX packages, styles, classes and fonts (including Type1 font-map registration). They do **not** add new TeX engine binaries — compilation always uses `pdflatex` + `bibtex`, which ship in the base image. Engines such as `xelatex`, `lualatex`, or `biber` are not provided.
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
