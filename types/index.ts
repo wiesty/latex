@@ -18,6 +18,18 @@ export interface FileTab {
   unsaved: boolean;
 }
 
+export type ExternalChangeKind = "modified" | "deleted" | "renamed";
+
+export interface ExternalChange {
+  path: string;
+  name: string;
+  kind: ExternalChangeKind;
+  newPath?: string;
+  newName?: string;
+  localContent?: string;
+  externalContent?: string;
+}
+
 export interface ParsedError {
   type: "error" | "warning" | "info";
   file: string;

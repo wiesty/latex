@@ -34,7 +34,14 @@ export default function ProjectSidebar() {
       if (data.projects) {
         setProjects(data.projects);
         const state = useEditorStore.getState();
-        if (!state.activeProject && data.projects.length > 0) {
+        const activeStillExists = data.projects.some(
+          (project: Project) => project.id === state.activeProject?.id
+        );
+        if (state.activeProject && !activeStillExists) {
+          setActiveProject(null);
+          localStorage.removeItem("activeProjectId");
+        }
+        if ((!state.activeProject || !activeStillExists) && data.projects.length > 0) {
           const savedProjectId = localStorage.getItem("activeProjectId");
           const savedProject = data.projects.find(
             (project: Project) => project.id === savedProjectId

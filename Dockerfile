@@ -18,11 +18,14 @@ FROM ${NODE_IMAGE} AS runner
 
 ARG BUILD_DATE
 ARG SOURCE_REPOSITORY=https://github.com/wiesty/latex
+ARG APP_VERSION=dev
 ENV BUILD_DATE=${BUILD_DATE}
+ENV APP_VERSION=${APP_VERSION}
 
 LABEL org.opencontainers.image.source=${SOURCE_REPOSITORY}
 LABEL org.opencontainers.image.description="Self-hosted browser-based LaTeX editor"
 LABEL org.opencontainers.image.licenses=MIT
+LABEL org.opencontainers.image.version=${APP_VERSION}
 
 WORKDIR /app
 

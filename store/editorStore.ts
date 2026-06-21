@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Project, FileTab, ParsedError } from "@/types";
+import { Project, FileTab, ParsedError, ExternalChange } from "@/types";
 
 interface EditorStore {
   // Projects
@@ -14,6 +14,11 @@ interface EditorStore {
   setActiveFile: (file: FileTab | null) => void;
   openFile: (file: FileTab) => void;
   closeFile: (path: string) => void;
+  replaceOpenFile: (
+    oldPath: string,
+    file: { path: string; name: string },
+    content: string
+  ) => void;
   markFileUnsaved: (path: string) => void;
   markFileSaved: (path: string) => void;
 
@@ -85,11 +90,13 @@ interface EditorStore {
   // File watcher
   externalChangeIndicator: string | null;
   setExternalChangeIndicator: (msg: string | null) => void;
-  pendingExternalChanges: Array<{ path: string; name: string }>;
-  setPendingExternalChanges: (files: Array<{ path: string; name: string }>) => void;
+  pendingExternalChanges: ExternalChange[];
+  setPendingExternalChanges: (files: ExternalChange[]) => void;
   clearPendingExternalChanges: () => void;
   internalWriteTimestamps: Record<string, number>;
   markInternalWrite: (path: string) => void;
+  fileTreeRevision: number;
+  bumpFileTreeRevision: () => void;
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -151,6 +158,22 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       const newContent = { ...state.fileContent };
       delete newContent[path];
       return { openFiles: filtered, activeFile: newActive, fileContent: newContent };
+    }),
+  replaceOpenFile: (oldPath, file, content) =>
+    set((state) => {
+      const replacement: FileTab = { ...file, unsaved: false };
+      const openFiles = state.openFiles.map((openFile) =>
+        openFile.path === oldPath ? replacement : openFile
+      );
+      const fileContent = { ...state.fileContent };
+      delete fileContent[oldPath];
+      fileContent[file.path] = content;
+      return {
+        openFiles,
+        activeFile:
+          state.activeFile?.path === oldPath ? replacement : state.activeFile,
+        fileContent,
+      };
     }),
   markFileUnsaved: (path) =>
     set((state) => ({
@@ -321,7 +344,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   pendingExternalChanges: [],
   setPendingExternalChanges: (files) =>
     set((state) => {
-      const merged = new Map<string, { path: string; name: string }>();
+      const merged = new Map<string, ExternalChange>();
       for (const file of state.pendingExternalChanges) {
         merged.set(file.path, file);
       }
@@ -345,4 +368,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       pruned[path] = now;
       return { internalWriteTimestamps: pruned };
     }),
+  fileTreeRevision: 0,
+  bumpFileTreeRevision: () =>
+    set((state) => ({ fileTreeRevision: state.fileTreeRevision + 1 })),
 }));

@@ -23,6 +23,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Package version
+        id: package-version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -35,6 +39,7 @@ jobs:
             org.opencontainers.image.licenses=MIT
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.package-version.outputs.version }}
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
@@ -48,31 +53,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Build date
         id: build-date
         run: echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
-      - name: Build image
-        run: |
-          tags=()
-          while IFS= read -r tag; do
-            tags+=("--tag" "$tag")
-          done <<< "${DOCKER_METADATA_OUTPUT_TAGS}"
-
-          labels=()
-          while IFS= read -r label; do
-            labels+=("--label" "$label")
-          done <<< "${DOCKER_METADATA_OUTPUT_LABELS}"
-
-          docker build \
-            "${tags[@]}" \
-            "${labels[@]}" \
-            --build-arg "BUILD_DATE=${{ steps.build-date.outputs.date }}" \
-            --build-arg "SOURCE_REPOSITORY=${{ github.server_url }}/${{ github.repository }}" \
-            .
-
-      - name: Push image
-        run: |
-          while IFS= read -r tag; do
-            docker push "$tag"
-          done <<< "${DOCKER_METADATA_OUTPUT_TAGS}"
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ steps.build-date.outputs.date }}
+            SOURCE_REPOSITORY=${{ github.server_url }}/${{ github.repository }}
+            APP_VERSION=${{ steps.package-version.outputs.version }}
+          cache-from: type=gha,scope=latex-editor
+          cache-to: type=gha,mode=max,scope=latex-editor

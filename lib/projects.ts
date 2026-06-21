@@ -25,10 +25,24 @@ export async function getProjects(): Promise<Project[]> {
     projects = [];
   }
 
+  const existingProjects = (
+    await Promise.all(
+      projects.map(async (project) => {
+        try {
+          const stat = await fs.stat(project.path);
+          return stat.isDirectory() ? project : null;
+        } catch {
+          return null;
+        }
+      })
+    )
+  ).filter((project): project is Project => project !== null);
+  let changed = existingProjects.length !== projects.length;
+  projects = existingProjects;
+
   // Auto-discover subfolders inside LATEX_PROJECTS_DIR
   const projectsDir = process.env.LATEX_PROJECTS_DIR;
   if (projectsDir) {
-    let changed = false;
     try {
       const entries = await fs.readdir(projectsDir, { withFileTypes: true });
       for (const entry of entries) {
@@ -49,9 +63,10 @@ export async function getProjects(): Promise<Project[]> {
       // projects dir doesn't exist yet — that's fine
     }
 
-    if (changed) {
-      await saveProjects(projects);
-    }
+  }
+
+  if (changed) {
+    await saveProjects(projects);
   }
 
   return projects;

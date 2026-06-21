@@ -3,11 +3,15 @@
 import { useEditorStore } from "@/store/editorStore";
 import { useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
+import { ExternalChange } from "@/types";
 
 interface FileChange {
   path: string;
   name: string;
   event: string;
+  kind: "created" | "modified" | "deleted" | "renamed";
+  newPath?: string;
+  newName?: string;
 }
 
 interface WatchEvent {
@@ -33,6 +37,7 @@ export function useFileWatcher() {
     setPdfTimestamp,
     setExternalChangeIndicator,
     setPendingExternalChanges,
+    bumpFileTreeRevision,
   } = useEditorStore();
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -100,27 +105,43 @@ export function useFileWatcher() {
       if (!state.activeProject) return;
 
       const openFiles = new Map(state.openFiles.map((file) => [file.path, file]));
-      const pendingReloadFiles: Array<{ path: string; name: string }> = [];
+      const pendingReloadFiles: ExternalChange[] = [];
       const relevantChanges: FileChange[] = [];
       let hasRealTexChanges = false;
       const now = Date.now();
 
+      if (files.length > 0) bumpFileTreeRevision();
+
       for (const file of files) {
         const lastInternalWrite = state.internalWriteTimestamps[file.path] ?? 0;
-        if (now - lastInternalWrite < INTERNAL_WRITE_IGNORE_MS) {
+        if (
+          file.kind !== "deleted" &&
+          file.kind !== "renamed" &&
+          now - lastInternalWrite < INTERNAL_WRITE_IGNORE_MS
+        ) {
           continue;
         }
 
-        const ext = file.name.split(".").pop()?.toLowerCase() || "";
+        const effectiveName = file.newName ?? file.name;
+        const ext = effectiveName.split(".").pop()?.toLowerCase() || "";
         const openFile = openFiles.get(file.path);
 
         if (openFile && TEXT_EXTENSIONS.has(ext)) {
-          if (!openFile.unsaved && file.event !== "rename") {
+          let externalContent: string | undefined;
+          const externalPath = file.kind === "renamed" ? file.newPath : file.path;
+
+          if (externalPath && file.kind !== "deleted") {
             try {
-              const res = await fetch(`/api/files?path=${encodeURIComponent(file.path)}`);
+              const res = await fetch(
+                `/api/files?path=${encodeURIComponent(externalPath)}`
+              );
               if (res.ok) {
                 const data = await res.json();
-                if (data.content === useEditorStore.getState().fileContent[file.path]) {
+                externalContent = data.content;
+                if (
+                  file.kind === "modified" &&
+                  data.content === useEditorStore.getState().fileContent[file.path]
+                ) {
                   continue;
                 }
               }
@@ -129,7 +150,20 @@ export function useFileWatcher() {
             }
           }
 
-          pendingReloadFiles.push({ path: file.path, name: file.name });
+          pendingReloadFiles.push({
+            path: file.path,
+            name: file.name,
+            kind:
+              file.kind === "renamed"
+                ? "renamed"
+                : file.kind === "deleted"
+                  ? "deleted"
+                  : "modified",
+            newPath: file.newPath,
+            newName: file.newName,
+            localContent: useEditorStore.getState().fileContent[file.path],
+            externalContent,
+          });
           relevantChanges.push(file);
           if (COMPILE_DEPENDENCY_EXTENSIONS.has(ext)) hasRealTexChanges = true;
         } else if (COMPILE_DEPENDENCY_EXTENSIONS.has(ext)) {
@@ -145,7 +179,11 @@ export function useFileWatcher() {
       if (pendingReloadFiles.length === 0 && !hasRealTexChanges) return;
 
       // Show indicator
-      const changedNames = relevantChanges.map((f) => f.name).slice(0, 3);
+      const changedNames = relevantChanges
+        .map((f) =>
+          f.kind === "renamed" ? `${f.name} → ${f.newName}` : f.name
+        )
+        .slice(0, 3);
       const suffix =
         relevantChanges.length > 3 ? ` +${relevantChanges.length - 3} weitere` : "";
       setExternalChangeIndicator(`${changedNames.join(", ")}${suffix}`);
@@ -158,7 +196,12 @@ export function useFileWatcher() {
         }, 3000);
       }
     },
-    [triggerCompile, setExternalChangeIndicator, setPendingExternalChanges]
+    [
+      triggerCompile,
+      setExternalChangeIndicator,
+      setPendingExternalChanges,
+      bumpFileTreeRevision,
+    ]
   );
 
   // Keep ref in sync for SSE handler

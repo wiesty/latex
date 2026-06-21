@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import FileEntryItem from "./FileEntryItem";
 
 export default function FileTree() {
-  const { activeProject, activeFile, openFile, showFileTree, toggleFileTree, mainFile, setMainFile, showHidden, setShowHidden } =
+  const { activeProject, activeFile, openFile, showFileTree, toggleFileTree, mainFile, setMainFile, showHidden, setShowHidden, fileTreeRevision } =
     useEditorStore();
   const [fileState, setFileState] = useState<{
     projectPath: string | null;
@@ -53,7 +53,7 @@ export default function FileTree() {
     return () => {
       cancelled = true;
     };
-  }, [activeProject, refreshTick, showHidden]);
+  }, [activeProject, refreshTick, showHidden, fileTreeRevision]);
 
   const handleCreateFile = async () => {
     if (!newFileName.trim() || !activeProject) return;

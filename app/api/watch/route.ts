@@ -96,8 +96,9 @@ export async function GET(request: NextRequest) {
 
       const flushChanges = () => {
         if (pendingChanges.size === 0) return;
-        const changes = Array.from(pendingChanges.entries()).flatMap(
+        const rawChanges = Array.from(pendingChanges.entries()).flatMap(
           ([filePath, eventType]) => {
+            const hadPreviousFingerprint = fingerprints.has(filePath);
             const previousFingerprint = fingerprints.get(filePath);
             const nextFingerprint = fingerprint(filePath);
 
@@ -114,11 +115,60 @@ export async function GET(request: NextRequest) {
                 path: filePath,
                 name: path.basename(filePath),
                 event: eventType,
+                kind:
+                  nextFingerprint === null
+                    ? "deleted"
+                    : hadPreviousFingerprint
+                      ? "modified"
+                      : "created",
+                previousFingerprint,
+                fingerprint: nextFingerprint,
               },
             ];
           }
         );
         pendingChanges = new Map();
+
+        const deleted = rawChanges.filter((change) => change.kind === "deleted");
+        const created = rawChanges.filter((change) => change.kind === "created");
+        const pairedCreatedPaths = new Set<string>();
+        const pairedDeletedPaths = new Set<string>();
+        const renamed = deleted.flatMap((removed) => {
+          const added = created.find(
+            (candidate) =>
+              !pairedCreatedPaths.has(candidate.path) &&
+              removed.previousFingerprint &&
+              candidate.fingerprint === removed.previousFingerprint
+          );
+          if (!added) return [];
+          pairedDeletedPaths.add(removed.path);
+          pairedCreatedPaths.add(added.path);
+          return [
+            {
+              path: removed.path,
+              name: removed.name,
+              newPath: added.path,
+              newName: added.name,
+              event: "rename",
+              kind: "renamed",
+            },
+          ];
+        });
+        const changes = [
+          ...renamed,
+          ...rawChanges
+            .filter(
+              (change) =>
+                !pairedDeletedPaths.has(change.path) &&
+                !pairedCreatedPaths.has(change.path)
+            )
+            .map(({ previousFingerprint, fingerprint: nextFingerprint, ...change }) => {
+              void previousFingerprint;
+              void nextFingerprint;
+              return change;
+            }),
+        ];
+
         if (changes.length > 0) {
           send({ type: "changes", files: changes, timestamp: Date.now() });
         }

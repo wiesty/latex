@@ -16,6 +16,7 @@ import {
 import { useTheme } from "next-themes";
 import { ReactNode, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import ExternalChangesModal from "./ExternalChangesModal";
 
 const emptySubscribe = () => () => {};
 
@@ -42,6 +43,9 @@ export default function Header() {
     clearPendingExternalChanges,
     setFileContent,
     markInternalWrite,
+    closeFile,
+    replaceOpenFile,
+    setMainFile,
   } = useEditorStore();
   const { setTheme, resolvedTheme } = useTheme();
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
@@ -54,17 +58,23 @@ export default function Header() {
   const autoScrollUI = uiHydrated ? autoScroll : true;
 
   const compileProject = useCallback(async () => {
-    if (!activeProject || compileStatus === "compiling") return false;
+    const state = useEditorStore.getState();
+    if (!state.activeProject || state.compileStatus === "compiling") return false;
 
     setCompileStatus("compiling");
     try {
       const entryFile =
-        mainFile ??
-        (activeFile?.name.endsWith(".tex") ? activeFile.name : "main.tex");
+        state.mainFile ??
+        (state.activeFile?.name.endsWith(".tex")
+          ? state.activeFile.name
+          : "main.tex");
       const res = await fetch("/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath: activeProject.path, mainFile: entryFile }),
+        body: JSON.stringify({
+          projectPath: state.activeProject.path,
+          mainFile: entryFile,
+        }),
       });
       const result = await res.json();
 
@@ -97,10 +107,6 @@ export default function Header() {
       return false;
     }
   }, [
-    activeProject,
-    activeFile,
-    compileStatus,
-    mainFile,
     setCompileStatus,
     setCompileResult,
     setPdfTimestamp,
@@ -143,62 +149,91 @@ export default function Header() {
     }
   }, [activeFile, fileContent, saveFile, autoCompile, compileProject]);
 
-  const saveUnsavedOpenFiles = useCallback(async () => {
-    const state = useEditorStore.getState();
-    const unsavedFiles = state.openFiles.filter((f) => f.unsaved);
-    if (unsavedFiles.length === 0) return true;
-
+  const acceptExternalChanges = useCallback(async () => {
     try {
-      for (const file of unsavedFiles) {
-        const content = state.fileContent[file.path];
-        if (content !== undefined) {
-          await saveFile(file.path, content);
+      for (const change of pendingExternalChanges) {
+        if (change.kind === "deleted") {
+          closeFile(change.path);
+          if (mainFile === change.name) setMainFile(null);
+          continue;
         }
-      }
-      toast.success(`${unsavedFiles.length} file(s) saved`);
-      return true;
-    } catch {
-      toast.error("Failed to save before reload");
-      return false;
-    }
-  }, [saveFile]);
 
-  const reloadPendingFiles = useCallback(async (filesToReload: Array<{ path: string; name: string }>) => {
-    if (filesToReload.length === 0) return;
+        if (change.kind === "renamed" && change.newPath && change.newName) {
+          replaceOpenFile(
+            change.path,
+            { path: change.newPath, name: change.newName },
+            change.externalContent ?? ""
+          );
+          if (mainFile === change.name) setMainFile(change.newName);
+          continue;
+        }
 
-    try {
-      for (const file of filesToReload) {
-        const res = await fetch(`/api/files?path=${encodeURIComponent(file.path)}`);
-        const data = await res.json();
-        if (data.content !== undefined) {
-          setFileContent(file.path, data.content);
-          markFileSaved(file.path);
+        if (change.externalContent !== undefined) {
+          setFileContent(change.path, change.externalContent);
+          markFileSaved(change.path);
         }
       }
       clearPendingExternalChanges();
-      toast.success("External changes reloaded");
-    } catch {
-      toast.error("Reload failed");
-    }
-  }, [clearPendingExternalChanges, setFileContent, markFileSaved]);
-
-  const handleReloadConfirm = useCallback(
-    async (saveBeforeReload: boolean) => {
-      const filesToReload = [...pendingExternalChanges];
-
-      if (saveBeforeReload) {
-        const saved = await saveUnsavedOpenFiles();
-        if (!saved) return;
-      }
-
-      // Close immediately to avoid rendering an empty modal while async work runs.
       setShowReloadModal(false);
-
-      await reloadPendingFiles(filesToReload);
+      toast.success("File-system changes accepted");
       await compileProject();
-    },
-    [pendingExternalChanges, saveUnsavedOpenFiles, reloadPendingFiles, compileProject]
-  );
+    } catch {
+      toast.error("Failed to apply external changes");
+    }
+  }, [
+    pendingExternalChanges,
+    closeFile,
+    mainFile,
+    setMainFile,
+    replaceOpenFile,
+    setFileContent,
+    markFileSaved,
+    clearPendingExternalChanges,
+    compileProject,
+  ]);
+
+  const keepEditorChanges = useCallback(async () => {
+    try {
+      for (const change of pendingExternalChanges) {
+        const content = change.localContent ?? fileContent[change.path];
+        if (content === undefined) {
+          throw new Error(`Editor content for ${change.name} is not loaded`);
+        }
+        const targetPath =
+          change.kind === "renamed" && change.newPath
+            ? change.newPath
+            : change.path;
+        await saveFile(targetPath, content);
+
+        if (change.kind === "renamed" && change.newName) {
+          replaceOpenFile(
+            change.path,
+            { path: targetPath, name: change.newName },
+            content
+          );
+          if (mainFile === change.name) setMainFile(change.newName);
+        } else {
+          markFileSaved(change.path);
+        }
+      }
+      clearPendingExternalChanges();
+      setShowReloadModal(false);
+      toast.success("Editor versions saved");
+      await compileProject();
+    } catch {
+      toast.error("Failed to save editor versions");
+    }
+  }, [
+    pendingExternalChanges,
+    fileContent,
+    saveFile,
+    replaceOpenFile,
+    mainFile,
+    setMainFile,
+    markFileSaved,
+    clearPendingExternalChanges,
+    compileProject,
+  ]);
 
   const handleCompile = useCallback(async () => {
     if (!activeProject || compileStatus === "compiling") return;
@@ -426,47 +461,13 @@ export default function Header() {
       </div>
 
       {showReloadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-4 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-              External changes detected
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-neutral-600 dark:text-neutral-300">
-              Changes were detected in {pendingExternalChanges.length} file(s).
-              Do you want to save before reload to avoid losing local edits?
-            </p>
-            <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-              {pendingExternalChanges.slice(0, 5).map((file) => (
-                <div key={file.path} className="truncate">{file.name}</div>
-              ))}
-              {pendingExternalChanges.length > 5 && (
-                <div className="text-neutral-500 dark:text-neutral-400">
-                  +{pendingExternalChanges.length - 5} more
-                </div>
-              )}
-            </div>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                onClick={() => setShowReloadModal(false)}
-                className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleReloadConfirm(false)}
-                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/45"
-              >
-                Reload without saving
-              </button>
-              <button
-                onClick={() => handleReloadConfirm(true)}
-                className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
-              >
-                Save and reload
-              </button>
-            </div>
-          </div>
-        </div>
+        <ExternalChangesModal
+          changes={pendingExternalChanges}
+          localContent={fileContent}
+          onClose={() => setShowReloadModal(false)}
+          onKeepEditor={keepEditorChanges}
+          onAcceptExternal={acceptExternalChanges}
+        />
       )}
     </div>
   );
