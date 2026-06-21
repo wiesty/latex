@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { Project, FileTab, ParsedError, ExternalChange } from "@/types";
 
 interface EditorStore {
@@ -51,6 +52,15 @@ interface EditorStore {
   // PDF
   pdfTimestamp: number;
   setPdfTimestamp: (t: number) => void;
+
+  // TeX package installation (kept in the store so the log survives the
+  // settings modal being closed and reopened)
+  texInstalling: boolean;
+  texInstallTarget: "extra" | "full" | null;
+  texInstallLog: string[];
+  texInstallFinished: boolean;
+  startTexInstall: (target: "extra" | "full") => Promise<boolean>;
+  clearTexInstallLog: () => void;
 
   // UI
   showFileTree: boolean;
@@ -236,6 +246,56 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   // PDF
   pdfTimestamp: Date.now(),
   setPdfTimestamp: (t) => set({ pdfTimestamp: t }),
+
+  // TeX package installation
+  texInstalling: false,
+  texInstallTarget: null,
+  texInstallLog: [],
+  texInstallFinished: false,
+  clearTexInstallLog: () => set({ texInstallLog: [], texInstallFinished: false }),
+  startTexInstall: async (target) => {
+    if (get().texInstalling) return false;
+    set({
+      texInstalling: true,
+      texInstallTarget: target,
+      texInstallLog: [],
+      texInstallFinished: false,
+    });
+    const append = (lines: string[]) =>
+      set((s) => ({ texInstallLog: [...s.texInstallLog, ...lines] }));
+    try {
+      const res = await fetch("/api/tex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Installation failed");
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        if (lines.length) append(lines);
+      }
+      if (buffer.trim()) append([buffer]);
+      toast.success("TeX packages installed");
+      set({ texInstalling: false, texInstallFinished: true });
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Installation failed";
+      append([`Error: ${message}`]);
+      toast.error(message);
+      set({ texInstalling: false, texInstallFinished: true });
+      return false;
+    }
+  },
 
   // UI (all persisted to localStorage)
   showFileTree: typeof window !== "undefined"

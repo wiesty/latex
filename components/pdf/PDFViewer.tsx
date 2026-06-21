@@ -112,6 +112,9 @@ export default function PDFViewer() {
   // Track which pages have rendered their canvas (heights are stable)
   const renderedPagesRef = useRef<Set<number>>(new Set());
   const pendingScrollRef = useRef<number | null>(null);
+  // Set when the page number changed because the user scrolled, so the
+  // auto-scroll effect below does not fight the manual scroll.
+  const suppressScrollRef = useRef(false);
 
   // Reset rendered tracking when a new PDF loads
   useEffect(() => {
@@ -141,12 +144,52 @@ export default function PDFViewer() {
     setPageInput(null);
   }, [pageInput, currentPDFPage, totalPDFPages, setCurrentPDFPage]);
 
-  // When the target page changes, mark it pending and attempt scroll
+  // When the target page changes, mark it pending and attempt scroll —
+  // unless the change originated from the user scrolling (then the view is
+  // already where it should be).
   useEffect(() => {
     if (!totalPDFPages) return;
+    if (suppressScrollRef.current) {
+      suppressScrollRef.current = false;
+      return;
+    }
     pendingScrollRef.current = currentPDFPage;
     tryScroll(currentPDFPage);
   }, [currentPDFPage, totalPDFPages, tryScroll]);
+
+  // Update the page indicator while the user scrolls through the PDF.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !totalPDFPages) return;
+
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const containerTop = container.getBoundingClientRect().top;
+        let best = 1;
+        let bestDist = Infinity;
+        for (const [num, el] of pageRefs.current) {
+          // Pick the page whose top is closest to the top of the viewport.
+          const dist = Math.abs(el.getBoundingClientRect().top - containerTop);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = num;
+          }
+        }
+        if (best !== useEditorStore.getState().currentPDFPage) {
+          suppressScrollRef.current = true;
+          setCurrentPDFPage(best);
+        }
+      });
+    };
+
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, [totalPDFPages, setCurrentPDFPage]);
 
   if (!activeProject) {
     return (

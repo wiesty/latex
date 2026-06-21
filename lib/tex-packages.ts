@@ -85,7 +85,7 @@ export function installPackages(
   onLog: (line: string) => void
 ): Promise<boolean> {
   if (installRunning) {
-    onLog("Eine Installation läuft bereits.");
+    onLog("An installation is already running.");
     return Promise.resolve(false);
   }
   installRunning = true;
@@ -108,7 +108,7 @@ export function installPackages(
     child.stderr.on("data", handle);
 
     child.on("error", (err) => {
-      onLog(`Fehler: ${err.message}`);
+      onLog(`Error: ${err.message}`);
       installRunning = false;
       resolve(false);
     });
@@ -117,15 +117,15 @@ export function installPackages(
       if (buffer.trim()) onLog(buffer);
       if (code === 0) {
         // Refresh font maps / filename db in the user tree (best effort)
-        onLog("> updmap-user (Fonts aktualisieren)");
+        onLog("> updmap-user (refreshing fonts)");
         try {
           await execAsync("updmap-user", { env: texEnv(), timeout: 120000 });
         } catch {
-          onLog("Hinweis: updmap-user übersprungen.");
+          onLog("Note: updmap-user skipped.");
         }
-        onLog("✓ Fertig.");
+        onLog("✓ Done.");
       } else {
-        onLog(`✗ tlmgr beendet mit Code ${code}.`);
+        onLog(`✗ tlmgr exited with code ${code}.`);
       }
       installRunning = false;
       resolve(code === 0);

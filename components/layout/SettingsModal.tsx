@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, CheckCircle2, Circle, X } from "lucide-react";
-import { toast } from "sonner";
+import { useEditorStore } from "@/store/editorStore";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -16,25 +16,13 @@ type TexStatus = {
 };
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
+  const { texInstalling, texInstallLog, texInstallFinished, startTexInstall } =
+    useEditorStore();
   const [status, setStatus] = useState<TexStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const [installing, setInstalling] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
 
-  const loadStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/tex");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Status nicht verfügbar");
-      setStatus(data);
-      setStatusError(null);
-      if (data.installing) setInstalling(true);
-    } catch (err) {
-      setStatusError(err instanceof Error ? err.message : "Status nicht verfügbar");
-    }
-  }, []);
-
+  // Load status on open, and refresh it again whenever an install finishes.
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/tex", { signal: controller.signal })
@@ -45,52 +33,22 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           return;
         }
         setStatus(data);
-        if (data.installing) setInstalling(true);
+        setStatusError(null);
       })
       .catch(() => {});
     return () => controller.abort();
-  }, []);
+  }, [texInstallFinished]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [log]);
+  }, [texInstallLog]);
 
   const runInstall = useCallback(
-    async (target: "extra" | "full") => {
-      if (installing) return;
-      setInstalling(true);
-      setLog([]);
-      try {
-        const res = await fetch("/api/tex", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target }),
-        });
-        if (!res.ok || !res.body) {
-          const data = await res.json().catch(() => null);
-          throw new Error(data?.error || "Installation fehlgeschlagen");
-        }
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          if (lines.length) setLog((prev) => [...prev, ...lines]);
-        }
-        if (buffer.trim()) setLog((prev) => [...prev, buffer]);
-        toast.success("TeX-Pakete installiert");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Installation fehlgeschlagen");
-      } finally {
-        setInstalling(false);
-        loadStatus();
-      }
+    (target: "extra" | "full") => {
+      if (texInstalling) return;
+      startTexInstall(target);
     },
-    [installing, loadStatus]
+    [texInstalling, startTexInstall]
   );
 
   return (
@@ -99,17 +57,17 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="flex items-center justify-between border-b border-neutral-200 p-4 dark:border-neutral-800">
           <div>
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-              Settings · TeX-Pakete
+              Settings · TeX packages
             </h2>
             <p className="mt-1 text-xs text-neutral-500">
-              Das Image enthält ein schlankes TeX-Set. Erweiterte Pakete und
-              Fonts werden hier nachgeladen und bleiben dauerhaft erhalten.
+              The image ships with a slim TeX set. Additional packages and fonts
+              are downloaded here and kept permanently.
             </p>
           </div>
           <button
             onClick={onClose}
             className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-            title="Schließen"
+            title="Close"
           >
             <X className="h-4 w-4" />
           </button>
@@ -122,47 +80,47 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              <StatusRow label="Basis (scheme-basic, Deutsch)" installed={status?.base} />
+              <StatusRow label="Base (scheme-basic, German)" installed={status?.base} />
               <StatusRow
-                label="Erweiterte Pakete & Fonts (latexextra, fontsextra, TikZ, …)"
+                label="Extra packages & fonts (latexextra, fontsextra, TikZ, …)"
                 installed={status?.extra}
               />
-              <StatusRow label="Vollständiges TeX Live (scheme-full)" installed={status?.full} />
+              <StatusRow label="Full TeX Live (scheme-full)" installed={status?.full} />
             </div>
           )}
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={() => runInstall("extra")}
-              disabled={installing || status?.extra || status?.full}
+              disabled={texInstalling || status?.extra || status?.full}
               className="flex items-center gap-1.5 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
-              {installing && <Loader2 className="h-3 w-3 animate-spin" />}
-              Erweiterte Pakete installieren
+              {texInstalling && <Loader2 className="h-3 w-3 animate-spin" />}
+              Install extra packages
             </button>
             <button
               onClick={() => runInstall("full")}
-              disabled={installing || status?.full}
+              disabled={texInstalling || status?.full}
               className="flex items-center gap-1.5 rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
-              Vollständiges TeX Live installieren (groß)
+              Install full TeX Live (large)
             </button>
           </div>
 
           <p className="mt-2 text-[11px] text-neutral-400">
-            Einmalig Internet + Download nötig. Fehlende Pakete werden außerdem
-            beim Kompilieren automatisch nachgezogen.
+            Requires internet and a one-time download. Missing packages are also
+            installed automatically during compilation.
           </p>
 
-          {(installing || log.length > 0) && (
+          {(texInstalling || texInstallLog.length > 0) && (
             <div
               ref={logRef}
               className="mt-3 h-56 overflow-auto rounded-lg border border-neutral-200 bg-neutral-950 p-3 font-mono text-[11px] leading-5 text-neutral-300 dark:border-neutral-700"
             >
-              {log.length === 0 ? (
-                <span className="text-neutral-500">Installation läuft…</span>
+              {texInstallLog.length === 0 ? (
+                <span className="text-neutral-500">Installing…</span>
               ) : (
-                log.map((line, i) => (
+                texInstallLog.map((line, i) => (
                   <div key={i} className="whitespace-pre-wrap break-all">
                     {line || " "}
                   </div>
@@ -177,7 +135,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             onClick={onClose}
             className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            Schließen
+            Close
           </button>
         </div>
       </div>

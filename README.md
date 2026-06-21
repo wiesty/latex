@@ -13,6 +13,7 @@ A self-hosted LaTeX workspace for editing, compiling, and reviewing PDFs in the 
 - Existing PDFs restored after a browser reload
 - Dark mode, resizable panels, logs, warnings, and errors
 - Built-in update check against the latest version in this repository
+- Slim base TeX Live with on-demand package/font installs
 
 ## Run with Docker Compose
 
@@ -52,6 +53,21 @@ docker compose up -d
 ```
 
 Your project and configuration mounts are reused; replacing the container does not delete them.
+
+## TeX packages
+
+To keep the image small and builds fast, it ships with a **slim TeX Live set** (`scheme-basic` plus the recommended LaTeX/font collections and German language support) instead of the multi-gigabyte full distribution. This is enough for simple and German-language documents out of the box.
+
+Anything heavier (TikZ, extended fonts, `latexextra`, …) is installed **on demand at runtime**, in two ways:
+
+- **Automatically during compilation** — if a compile fails because a package is missing, the editor resolves the missing `.sty`/`.cls` file to its TeX Live package, installs it, and recompiles once.
+- **Manually from Settings** — click the gear icon (top right) → *TeX packages*:
+  - **Install extra packages** — a curated set covering the vast majority of documents (`latexextra`, `fontsextra`, `pictures`/TikZ, `bibtexextra`, …).
+  - **Install full TeX Live** — everything (`scheme-full`, a large download).
+
+Installs run via `tlmgr` in user mode and land in `TEXMFHOME` (`/data/config/texmf`), which lives on the persistent `latex-config` volume — so added packages **survive container restarts and image updates**. A one-time internet connection is required to download them.
+
+> Note: installing packages requires the container to reach the internet (CTAN mirrors). The very first install of a large set can take a few minutes; afterwards everything is cached on the volume.
 
 ## Keyboard shortcuts
 

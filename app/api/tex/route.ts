@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   if (isInstallRunning()) {
     return NextResponse.json(
-      { error: "Eine Installation läuft bereits." },
+      { error: "An installation is already running." },
       { status: 409 }
     );
   }
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
         }
       };
       installPackages(packages, onLog)
-        .catch((err) => onLog(`Fehler: ${err?.message ?? err}`))
+        .catch((err) => onLog(`Error: ${err?.message ?? err}`))
         .finally(() => {
           try {
             controller.close();
