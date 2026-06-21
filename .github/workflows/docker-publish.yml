@@ -13,11 +13,18 @@ env:
 
 jobs:
   build:
-    name: Build and publish image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    name: Build ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -27,34 +34,12 @@ jobs:
         id: package-version
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.description=Self-hosted browser-based LaTeX editor
-            org.opencontainers.image.licenses=MIT
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ steps.package-version.outputs.version }}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-
-
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -63,17 +48,58 @@ jobs:
         id: build-date
         run: echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push image
+      - name: Build and push architecture image
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ github.sha }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=Self-hosted browser-based LaTeX editor
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ steps.package-version.outputs.version }}
           build-args: |
             BUILD_DATE=${{ steps.build-date.outputs.date }}
             SOURCE_REPOSITORY=${{ github.server_url }}/${{ github.repository }}
             APP_VERSION=${{ steps.package-version.outputs.version }}
-          cache-from: type=gha,scope=latex-editor
-          cache-to: type=gha,mode=max,scope=latex-editor
+          cache-from: type=gha,scope=latex-editor-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=latex-editor-${{ matrix.arch }}
+
+  manifest:
+    name: Publish multi-architecture image
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Package version
+        id: package-version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Publish manifest
+        run: |
+          image="${REGISTRY}/${IMAGE_NAME}"
+          sources=(
+            "${image}:build-${GITHUB_SHA}-amd64"
+            "${image}:build-${GITHUB_SHA}-arm64"
+          )
+
+          docker buildx imagetools create \
+            --tag "${image}:latest" \
+            --tag "${image}:${{ steps.package-version.outputs.version }}" \
+            --tag "${image}:sha-${GITHUB_SHA::7}" \
+            "${sources[@]}"
