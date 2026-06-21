@@ -12,17 +12,20 @@ import {
   RefreshCw,
   ArrowUpCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface VersionInfo {
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
   repositoryUrl: string;
+  checkFailed?: boolean;
 }
 
 export default function StatusBar() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const [checking, setChecking] = useState(false);
   const {
     activeFile,
     activeProject,
@@ -37,14 +40,39 @@ export default function StatusBar() {
     externalChangeIndicator,
   } = useEditorStore();
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/version", { signal: controller.signal })
-      .then((response) => response.json())
-      .then(setVersionInfo)
-      .catch(() => {});
-    return () => controller.abort();
+  const checkVersion = useCallback(async (manual: boolean) => {
+    if (manual) setChecking(true);
+    try {
+      const response = await fetch(`/api/version${manual ? "?fresh=1" : ""}`, {
+        cache: "no-store",
+      });
+      const data: VersionInfo = await response.json();
+      setVersionInfo(data);
+      if (manual) {
+        if (data.checkFailed) {
+          toast.error("Could not reach GitHub for the version check");
+        } else if (data.updateAvailable) {
+          toast.success(`Update available: v${data.latestVersion}`, {
+            action: {
+              label: "Open",
+              onClick: () => window.open(data.repositoryUrl, "_blank"),
+            },
+          });
+        } else {
+          toast.success(`You're on the latest version (v${data.currentVersion})`);
+        }
+      }
+    } catch {
+      if (manual) toast.error("Version check failed");
+    } finally {
+      if (manual) setChecking(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    checkVersion(false);
+  }, [checkVersion]);
 
   return (
     <div className="flex h-7 items-center justify-between border-t border-neutral-200 bg-neutral-50 px-3 text-[11px] dark:border-neutral-800 dark:bg-neutral-950">
@@ -77,26 +105,31 @@ export default function StatusBar() {
       {/* Right */}
       <div className="flex items-center gap-2 text-neutral-500">
         {versionInfo && (
-          <a
-            href={versionInfo.repositoryUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
+          <button
+            onClick={() => checkVersion(true)}
+            disabled={checking}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-neutral-200 disabled:opacity-60 dark:hover:bg-neutral-800 ${
               versionInfo.updateAvailable
                 ? "font-medium text-blue-500"
                 : "text-neutral-400"
             }`}
             title={
               versionInfo.updateAvailable
-                ? `Version ${versionInfo.latestVersion} is available`
-                : `Wiesty's LaTeX Editor v${versionInfo.currentVersion}`
+                ? `Version ${versionInfo.latestVersion} is available — click to re-check`
+                : `Wiesty's LaTeX Editor v${versionInfo.currentVersion} — click to check for updates`
             }
           >
-            {versionInfo.updateAvailable && <ArrowUpCircle className="h-3 w-3" />}
-            {versionInfo.updateAvailable
-              ? `Update v${versionInfo.latestVersion}`
-              : `v${versionInfo.currentVersion}`}
-          </a>
+            {checking ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              versionInfo.updateAvailable && <ArrowUpCircle className="h-3 w-3" />
+            )}
+            {checking
+              ? "Checking…"
+              : versionInfo.updateAvailable
+                ? `Update v${versionInfo.latestVersion}`
+                : `v${versionInfo.currentVersion}`}
+          </button>
         )}
         {/* External change indicator */}
         {externalChangeIndicator && (

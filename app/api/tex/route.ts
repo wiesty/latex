@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkLatexInstalled } from "@/lib/compile";
 import {
   getInstalledStatus,
-  installPackages,
+  getInstallState,
+  startInstall,
   isInstallRunning,
-  EXTRA_COLLECTIONS,
-  FULL_SCHEME,
 } from "@/lib/tex-packages";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +18,15 @@ export async function GET() {
     );
   }
   const status = await getInstalledStatus();
-  return NextResponse.json({ ...status, installing: isInstallRunning() });
+  const state = getInstallState();
+  return NextResponse.json({
+    ...status,
+    installing: state.running,
+    target: state.target,
+    log: state.log,
+    finished: state.finished,
+    success: state.success,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -33,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   if (isInstallRunning()) {
     return NextResponse.json(
-      { error: "An installation is already running." },
+      { error: "An installation is already running.", installing: true },
       { status: 409 }
     );
   }
@@ -41,36 +48,9 @@ export async function POST(request: NextRequest) {
   const { target } = (await request.json().catch(() => ({}))) as {
     target?: "extra" | "full";
   };
-  const packages = target === "full" ? FULL_SCHEME : EXTRA_COLLECTIONS;
 
-  // Stream tlmgr output to the client as plain text lines.
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const onLog = (line: string) => {
-        try {
-          controller.enqueue(encoder.encode(line + "\n"));
-        } catch {
-          // controller already closed
-        }
-      };
-      installPackages(packages, onLog)
-        .catch((err) => onLog(`Error: ${err?.message ?? err}`))
-        .finally(() => {
-          try {
-            controller.close();
-          } catch {
-            // already closed
-          }
-        });
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  // Fire-and-forget: the install runs in the background and buffers its output
+  // into the server-side state, which clients poll via GET.
+  const started = startInstall(target === "full" ? "full" : "extra");
+  return NextResponse.json({ started }, { status: started ? 202 : 409 });
 }

@@ -41,10 +41,95 @@ export type TexStatus = {
   full: boolean;
 };
 
-/** In-memory guard so two installs cannot run concurrently. */
-let installRunning = false;
+/**
+ * Server-side state for the current/last UI-triggered install. Kept in memory so
+ * a reloaded browser can fetch the live log and progress (instead of losing it).
+ */
+export type InstallState = {
+  running: boolean;
+  target: "extra" | "full" | null;
+  log: string[];
+  finished: boolean;
+  success: boolean;
+};
+
+let installState: InstallState = {
+  running: false,
+  target: null,
+  log: [],
+  finished: false,
+  success: false,
+};
+/** Separate lock for the silent auto-install-on-compile path. */
+let quietRunning = false;
+
+export function getInstallState(): InstallState {
+  return installState;
+}
 export function isInstallRunning(): boolean {
-  return installRunning;
+  return installState.running || quietRunning;
+}
+
+/**
+ * Start a UI install of the given target in the background. Output is buffered
+ * into `installState` so any client can read it via GET. Returns false if an
+ * install is already in progress. Runtime installs land in TEXMFHOME (persistent
+ * volume), so they survive container/image updates.
+ */
+export function startInstall(target: "extra" | "full"): boolean {
+  if (isInstallRunning()) return false;
+
+  const packages = target === "full" ? FULL_SCHEME : EXTRA_COLLECTIONS;
+  installState = {
+    running: true,
+    target,
+    log: [`> tlmgr --usermode install ${packages.join(" ")}`],
+    finished: false,
+    success: false,
+  };
+  const append = (line: string) => installState.log.push(line);
+
+  const child = spawn("tlmgr", ["--usermode", "install", ...packages], {
+    env: texEnv(),
+  });
+
+  let buffer = "";
+  const handle = (chunk: Buffer) => {
+    buffer += chunk.toString();
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) append(line);
+  };
+  child.stdout.on("data", handle);
+  child.stderr.on("data", handle);
+
+  child.on("error", (err) => {
+    append(`Error: ${err.message}`);
+    installState.running = false;
+    installState.finished = true;
+    installState.success = false;
+  });
+
+  child.on("close", async (code) => {
+    if (buffer.trim()) append(buffer);
+    if (code === 0) {
+      append("> updmap-user (refreshing fonts)");
+      try {
+        await execAsync("updmap-user", { env: texEnv(), timeout: 120000 });
+      } catch {
+        append("Note: updmap-user skipped.");
+      }
+      append("✓ Done.");
+      installState.success = true;
+    } else {
+      append(`✗ tlmgr exited with code ${code}.`);
+      installState.success = false;
+    }
+    installState.running = false;
+    installState.finished = true;
+  });
+
+  return true;
 }
 
 /** Names of all currently installed TeX Live packages (system + user tree). */
@@ -73,64 +158,6 @@ export async function getInstalledStatus(): Promise<TexStatus> {
   } catch {
     return { base: false, extra: false, full: false };
   }
-}
-
-/**
- * Install collections via tlmgr user-mode, streaming each output line to `onLog`.
- * Resolves to true on success. Runtime installs land in TEXMFHOME (persistent
- * volume), so they survive container/image updates.
- */
-export function installPackages(
-  packages: string[],
-  onLog: (line: string) => void
-): Promise<boolean> {
-  if (installRunning) {
-    onLog("An installation is already running.");
-    return Promise.resolve(false);
-  }
-  installRunning = true;
-
-  return new Promise<boolean>((resolve) => {
-    const args = ["--usermode", "install", ...packages];
-    onLog(`> tlmgr ${args.join(" ")}`);
-
-    const child = spawn("tlmgr", args, { env: texEnv() });
-
-    let buffer = "";
-    const handle = (chunk: Buffer) => {
-      buffer += chunk.toString();
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) onLog(line);
-    };
-
-    child.stdout.on("data", handle);
-    child.stderr.on("data", handle);
-
-    child.on("error", (err) => {
-      onLog(`Error: ${err.message}`);
-      installRunning = false;
-      resolve(false);
-    });
-
-    child.on("close", async (code) => {
-      if (buffer.trim()) onLog(buffer);
-      if (code === 0) {
-        // Refresh font maps / filename db in the user tree (best effort)
-        onLog("> updmap-user (refreshing fonts)");
-        try {
-          await execAsync("updmap-user", { env: texEnv(), timeout: 120000 });
-        } catch {
-          onLog("Note: updmap-user skipped.");
-        }
-        onLog("✓ Done.");
-      } else {
-        onLog(`✗ tlmgr exited with code ${code}.`);
-      }
-      installRunning = false;
-      resolve(code === 0);
-    });
-  });
 }
 
 /**
@@ -165,8 +192,8 @@ export async function resolveMissingPackages(log: string): Promise<string[]> {
 
 /** Quiet install used by the auto-install-on-compile path. */
 export async function installPackagesQuiet(packages: string[]): Promise<boolean> {
-  if (packages.length === 0 || installRunning) return false;
-  installRunning = true;
+  if (packages.length === 0 || isInstallRunning()) return false;
+  quietRunning = true;
   try {
     await execAsync(`tlmgr --usermode install ${packages.join(" ")}`, {
       env: texEnv(),
@@ -182,6 +209,6 @@ export async function installPackagesQuiet(packages: string[]): Promise<boolean>
   } catch {
     return false;
   } finally {
-    installRunning = false;
+    quietRunning = false;
   }
 }

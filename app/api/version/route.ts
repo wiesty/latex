@@ -25,12 +25,17 @@ function isNewerVersion(candidate: string, current: string): boolean {
   return false;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const currentVersion = packageJson.version;
+  // A manual check (?fresh=1) bypasses the 15-minute cache so clicking the
+  // version in the status bar always re-queries GitHub.
+  const fresh = new URL(request.url).searchParams.has("fresh");
 
   try {
     const response = await fetch(LATEST_PACKAGE_URL, {
-      next: { revalidate: 900 },
+      ...(fresh
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: 900 } }),
       headers: { Accept: "application/json" },
     });
     if (!response.ok) throw new Error("Version source unavailable");

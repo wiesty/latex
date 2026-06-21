@@ -16,11 +16,22 @@ type TexStatus = {
 };
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
-  const { texInstalling, texInstallLog, texInstallFinished, startTexInstall } =
-    useEditorStore();
+  const {
+    texInstalling,
+    texInstallLog,
+    texInstallFinished,
+    startTexInstall,
+    syncTexInstall,
+  } = useEditorStore();
   const [status, setStatus] = useState<TexStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+
+  // Pick up any install already in progress on the server (e.g. after a page
+  // reload) so the live log/progress shows instead of being lost.
+  useEffect(() => {
+    syncTexInstall();
+  }, [syncTexInstall]);
 
   // Load status on open, and refresh it again whenever an install finishes.
   useEffect(() => {
