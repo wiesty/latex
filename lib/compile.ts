@@ -3,11 +3,6 @@ import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import { parseLatexLog } from "./latex-log-parser";
-import {
-  getTexPath,
-  resolveMissingPackages,
-  installPackagesQuiet,
-} from "./tex-packages";
 import { CompileResult } from "@/types";
 
 const execAsync = promisify(exec);
@@ -15,27 +10,6 @@ const execAsync = promisify(exec);
 export async function compileLatex(
   projectPath: string,
   mainFile: string = "main.tex"
-): Promise<CompileResult> {
-  // First attempt; if it fails on a missing package, try to install it once
-  // and recompile (auto-install). The guard prevents infinite loops.
-  let result = await runPipeline(projectPath, mainFile);
-
-  if (!result.success) {
-    const missing = await resolveMissingPackages(result.log);
-    if (missing.length > 0) {
-      const installed = await installPackagesQuiet(missing);
-      if (installed) {
-        result = await runPipeline(projectPath, mainFile);
-      }
-    }
-  }
-
-  return result;
-}
-
-async function runPipeline(
-  projectPath: string,
-  mainFile: string
 ): Promise<CompileResult> {
   const mainBaseName = mainFile.replace(/\.tex$/, "");
   const start = Date.now();
@@ -90,6 +64,15 @@ async function runPipeline(
     errors,
     warnings,
   };
+}
+
+function getTexPath(): string {
+  const extra = [
+    "/Library/TeX/texbin",          // macOS (MacTeX)
+    "/usr/local/texlive/2024/bin/x86_64-linux", // Linux TeX Live
+    "/usr/bin",                     // Linux distro packages
+  ];
+  return [...extra, process.env.PATH].filter(Boolean).join(":");
 }
 
 async function runCommand(

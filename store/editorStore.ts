@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { toast } from "sonner";
 import { Project, FileTab, ParsedError, ExternalChange } from "@/types";
 
 interface EditorStore {
@@ -53,15 +52,6 @@ interface EditorStore {
   pdfTimestamp: number;
   setPdfTimestamp: (t: number) => void;
 
-  // TeX package installation (kept in the store so the log survives the
-  // settings modal being closed and reopened)
-  texInstalling: boolean;
-  texInstallTarget: "extra" | "full" | null;
-  texInstallLog: string[];
-  texInstallFinished: boolean;
-  startTexInstall: (target: "extra" | "full") => Promise<boolean>;
-  syncTexInstall: () => void;
-
   // UI
   showFileTree: boolean;
   showLogPanel: boolean;
@@ -107,49 +97,6 @@ interface EditorStore {
   markInternalWrite: (path: string) => void;
   fileTreeRevision: number;
   bumpFileTreeRevision: () => void;
-}
-
-// --- TeX install polling (module-scoped so it persists across renders) ---
-let texPollTimer: ReturnType<typeof setTimeout> | null = null;
-let texPolling = false;
-let texPrevRunning = false;
-
-async function texPoll(): Promise<void> {
-  texPolling = true;
-  let running = false;
-  try {
-    const res = await fetch("/api/tex");
-    const data = await res.json();
-    if (res.ok && !data.error) {
-      running = !!data.installing;
-      const state = useEditorStore.getState();
-      useEditorStore.setState({
-        texInstalling: running,
-        texInstallLog: Array.isArray(data.log) ? data.log : state.texInstallLog,
-        texInstallTarget: data.target ?? state.texInstallTarget,
-      });
-      if (texPrevRunning && !running) {
-        useEditorStore.setState({ texInstallFinished: true });
-        if (data.success) toast.success("TeX packages installed");
-        else toast.error("Installation failed");
-      }
-      texPrevRunning = running;
-    }
-  } catch {
-    running = false;
-  }
-  if (running) {
-    texPollTimer = setTimeout(texPoll, 1500);
-  } else {
-    texPolling = false;
-    texPollTimer = null;
-  }
-}
-
-function ensureTexPoll(): void {
-  if (texPolling) return;
-  if (texPollTimer) clearTimeout(texPollTimer);
-  texPoll();
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -289,45 +236,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   // PDF
   pdfTimestamp: Date.now(),
   setPdfTimestamp: (t) => set({ pdfTimestamp: t }),
-
-  // TeX package installation — the install runs server-side; we poll the API so
-  // the log/progress survive a page reload (the server keeps the buffer).
-  texInstalling: false,
-  texInstallTarget: null,
-  texInstallLog: [],
-  texInstallFinished: false,
-  startTexInstall: async (target) => {
-    if (get().texInstalling) return false;
-    set({
-      texInstalling: true,
-      texInstallTarget: target,
-      texInstallLog: [],
-      texInstallFinished: false,
-    });
-    try {
-      const res = await fetch("/api/tex", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target }),
-      });
-      // 409 = already running; that's fine, we just poll the existing job.
-      if (!res.ok && res.status !== 409) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Installation failed");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Installation failed";
-      toast.error(message);
-      set({ texInstalling: false, texInstallFinished: true });
-      return false;
-    }
-    texPrevRunning = true;
-    ensureTexPoll();
-    return true;
-  },
-  syncTexInstall: () => {
-    ensureTexPoll();
-  },
 
   // UI (all persisted to localStorage)
   showFileTree: typeof window !== "undefined"
