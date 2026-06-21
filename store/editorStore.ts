@@ -32,6 +32,7 @@ interface EditorStore {
   parsedErrors: ParsedError[];
   parsedWarnings: ParsedError[];
   compiledPdfPath: string | null;
+  restoreCompiledPdf: (path: string, timestamp: number) => void;
   setCompileStatus: (status: "idle" | "compiling" | "success" | "error") => void;
   setCompileResult: (result: {
     log: string;
@@ -91,7 +92,7 @@ interface EditorStore {
   markInternalWrite: (path: string) => void;
 }
 
-export const useEditorStore = create<EditorStore>((set) => ({
+export const useEditorStore = create<EditorStore>((set, get) => ({
   // Projects
   projects: [],
   activeProject: null,
@@ -99,6 +100,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
   setActiveProject: (project) =>
     set((state) => {
       if (project?.id === state.activeProject?.id) return { activeProject: project };
+      if (typeof window !== "undefined") {
+        if (project) {
+          localStorage.setItem("activeProjectId", project.id);
+        } else {
+          localStorage.removeItem("activeProjectId");
+        }
+      }
       // Clear open files, content, and PDF when switching projects
       return {
         activeProject: project,
@@ -109,8 +117,15 @@ export const useEditorStore = create<EditorStore>((set) => ({
         compileLog: "",
         parsedErrors: [],
         parsedWarnings: [],
-        mainFile: null,
+        mainFile:
+          project && typeof window !== "undefined"
+            ? localStorage.getItem(`mainFile:${project.id}`)
+            : null,
         compiledPdfPath: null,
+        currentPDFPage: 1,
+        totalPDFPages: 0,
+        pendingExternalChanges: [],
+        externalChangeIndicator: null,
       };
     }),
 
@@ -152,7 +167,17 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   // Main file
   mainFile: null,
-  setMainFile: (file) => set({ mainFile: file }),
+  setMainFile: (file) => {
+    const project = get().activeProject;
+    if (project && typeof window !== "undefined") {
+      if (file) {
+        localStorage.setItem(`mainFile:${project.id}`, file);
+      } else {
+        localStorage.removeItem(`mainFile:${project.id}`);
+      }
+    }
+    set({ mainFile: file });
+  },
 
   // Content
   fileContent: {},
@@ -168,6 +193,12 @@ export const useEditorStore = create<EditorStore>((set) => ({
   parsedErrors: [],
   parsedWarnings: [],
   compiledPdfPath: null,
+  restoreCompiledPdf: (pdfPath, timestamp) =>
+    set({
+      compiledPdfPath: pdfPath,
+      pdfTimestamp: timestamp,
+      compileStatus: "success",
+    }),
   setCompileStatus: (status) => set({ compileStatus: status }),
   setCompileResult: (result) =>
     set({

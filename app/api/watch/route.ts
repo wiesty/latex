@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import { isLatexBuildArtifact, isTemporaryFile } from "@/lib/latex-artifacts";
 
 const WATCH_EXTENSIONS = new Set([
   ".tex", ".bib", ".sty", ".cls", ".bst",
@@ -8,16 +10,50 @@ const WATCH_EXTENSIONS = new Set([
   ".tikz", ".pgf", ".csv", ".dat", ".txt", ".md",
 ]);
 
-// LaTeX build artifacts to ignore
-const IGNORE_EXTENSIONS = new Set([
-  ".aux", ".log", ".out", ".toc", ".lof", ".lot",
-  ".fls", ".fdb_latexmk", ".synctex.gz", ".synctex",
-  ".bbl", ".blg", ".bcf", ".run.xml",
-  ".nav", ".snm", ".vrb", ".idx", ".ind", ".ilg",
-  ".glg", ".glo", ".gls", ".ist",
-]);
-
 export const dynamic = "force-dynamic";
+
+function shouldWatchFile(fileName: string): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  return (
+    WATCH_EXTENSIONS.has(ext) &&
+    !isLatexBuildArtifact(fileName) &&
+    !isTemporaryFile(fileName)
+  );
+}
+
+function fingerprint(filePath: string): string | null {
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return null;
+    const hash = crypto
+      .createHash("sha1")
+      .update(fs.readFileSync(filePath))
+      .digest("hex");
+    return `${stat.size}:${hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function collectFingerprints(
+  dirPath: string,
+  result = new Map<string, string | null>()
+) {
+  try {
+    for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        collectFingerprints(fullPath, result);
+      } else if (entry.isFile() && shouldWatchFile(entry.name)) {
+        result.set(fullPath, fingerprint(fullPath));
+      }
+    }
+  } catch {
+    // A directory may disappear while the initial snapshot is being created.
+  }
+  return result;
+}
 
 export async function GET(request: NextRequest) {
   const projectPath = request.nextUrl.searchParams.get("path");
@@ -56,38 +92,41 @@ export async function GET(request: NextRequest) {
       // Debounce: collect changes and batch them
       let pendingChanges = new Map<string, string>();
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+      const fingerprints = collectFingerprints(projectPath);
 
       const flushChanges = () => {
         if (pendingChanges.size === 0) return;
-        const changes = Array.from(pendingChanges.entries()).map(
-          ([filePath, eventType]) => ({
-            path: filePath,
-            name: path.basename(filePath),
-            event: eventType,
-          })
+        const changes = Array.from(pendingChanges.entries()).flatMap(
+          ([filePath, eventType]) => {
+            const previousFingerprint = fingerprints.get(filePath);
+            const nextFingerprint = fingerprint(filePath);
+
+            if (previousFingerprint === nextFingerprint) return [];
+
+            if (nextFingerprint === null) {
+              fingerprints.delete(filePath);
+            } else {
+              fingerprints.set(filePath, nextFingerprint);
+            }
+
+            return [
+              {
+                path: filePath,
+                name: path.basename(filePath),
+                event: eventType,
+              },
+            ];
+          }
         );
-        send({ type: "changes", files: changes, timestamp: Date.now() });
         pendingChanges = new Map();
+        if (changes.length > 0) {
+          send({ type: "changes", files: changes, timestamp: Date.now() });
+        }
       };
 
       const handleChange = (eventType: string, filename: string | null) => {
         if (!filename || closed) return;
-        const normalized = filename.toLowerCase();
-        const ext = path.extname(filename).toLowerCase();
-
-        // Ignore build artifacts
-        if (IGNORE_EXTENSIONS.has(ext)) return;
-
-        // Only watch known extensions
-        if (!WATCH_EXTENSIONS.has(ext)) return;
-
-        // Ignore hidden files
-        if (filename.startsWith(".")) return;
-
-        // Ignore temporary/lock artifacts created by editors or build tools
-        if (normalized.includes(".busy") || normalized.endsWith("~") || normalized.endsWith(".tmp")) {
-          return;
-        }
+        if (!shouldWatchFile(filename)) return;
 
         const fullPath = path.join(projectPath, filename);
         pendingChanges.set(fullPath, eventType);

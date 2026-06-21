@@ -8,6 +8,7 @@ import {
 import fs from "fs/promises";
 import path from "path";
 import { FileEntry } from "@/types";
+import { isLatexBuildArtifact } from "@/lib/latex-artifacts";
 
 export async function GET(request: NextRequest) {
   const projectId = request.nextUrl.searchParams.get("id");
@@ -130,15 +131,6 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// LaTeX build artifacts that should be hidden from the file tree
-const LATEX_BUILD_EXTENSIONS = new Set([
-  ".aux", ".log", ".out", ".toc", ".lof", ".lot",
-  ".fls", ".fdb_latexmk", ".synctex.gz", ".synctex",
-  ".bbl", ".blg", ".bcf", ".run.xml",
-  ".nav", ".snm", ".vrb", ".idx", ".ind", ".ilg",
-  ".glg", ".glo", ".gls", ".ist",
-]);
-
 async function buildFileTree(
   dirPath: string,
   rootPath: string,
@@ -177,7 +169,7 @@ async function buildFileTree(
       const ext = path.extname(entry.name).toLowerCase();
 
       // Skip LaTeX build artifacts (unless showHidden)
-      if (!showHidden && LATEX_BUILD_EXTENSIONS.has(ext)) continue;
+      if (!showHidden && isLatexBuildArtifact(entry.name)) continue;
 
       // Skip compiled PDFs (PDF with same base name as a .tex file)
       if (!showHidden && ext === ".pdf") {

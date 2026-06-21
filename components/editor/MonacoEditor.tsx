@@ -84,11 +84,15 @@ export default function MonacoEditor() {
       const savedPath = activeFile.path;
       try {
         markInternalWrite(savedPath);
-        await fetch("/api/files", {
+        const response = await fetch("/api/files", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: savedPath, content }),
         });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || "Save failed");
+        }
         // Only mark as saved if the user hasn't typed more while the request was in-flight
         if (useEditorStore.getState().fileContent[savedPath] === content) {
           markFileSaved(savedPath);
@@ -189,11 +193,14 @@ export default function MonacoEditor() {
         monaco.languages.register({ id: "bibtex", extensions: [".bib"] });
       }
 
-      // Cmd+S shortcut
+      // Support both Command+S and Control+S on every platform.
       editor.addAction({
         id: "save-file",
         label: "Save and Compile",
-        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+        keybindings: [
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+          monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyS,
+        ],
         run: () => {
           handleSaveAndCompile();
         },

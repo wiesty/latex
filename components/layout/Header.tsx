@@ -109,11 +109,15 @@ export default function Header() {
   const saveFile = useCallback(
     async (path: string, content: string) => {
       markInternalWrite(path);
-      await fetch("/api/files", {
+      const response = await fetch("/api/files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path, content }),
       });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Save failed");
+      }
       if (useEditorStore.getState().fileContent[path] === content) {
         markFileSaved(path);
       }
@@ -225,7 +229,7 @@ export default function Header() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         const target = e.target as HTMLElement | null;
         if (target?.closest(".monaco-editor")) return;
         e.preventDefault();

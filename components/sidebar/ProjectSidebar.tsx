@@ -33,11 +33,23 @@ export default function ProjectSidebar() {
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);
+        const state = useEditorStore.getState();
+        if (!state.activeProject && data.projects.length > 0) {
+          const savedProjectId = localStorage.getItem("activeProjectId");
+          const savedProject = data.projects.find(
+            (project: Project) => project.id === savedProjectId
+          );
+          const mostRecentProject = [...data.projects].sort(
+            (a: Project, b: Project) =>
+              new Date(b.lastOpened).getTime() - new Date(a.lastOpened).getTime()
+          )[0];
+          setActiveProject(savedProject ?? mostRecentProject);
+        }
       }
     } catch {
       toast.error("Failed to load projects");
     }
-  }, [setProjects]);
+  }, [setActiveProject, setProjects]);
 
   useEffect(() => {
     loadProjects();

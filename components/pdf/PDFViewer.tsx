@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Download,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -19,7 +19,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 export default function PDFViewer() {
   const {
     activeProject,
+    mainFile,
     compiledPdfPath,
+    restoreCompiledPdf,
     pdfTimestamp,
     pdfZoom,
     setPdfZoom,
@@ -31,6 +33,32 @@ export default function PDFViewer() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [pageInput, setPageInput] = useState<string | null>(null);
+  const displayedPage = pageInput ?? String(currentPDFPage);
+
+  useEffect(() => {
+    if (!activeProject || compiledPdfPath) return;
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      projectPath: activeProject.path,
+      mainFile: mainFile ?? "main.tex",
+      info: "1",
+    });
+
+    fetch(`/api/pdf?${params}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.exists && data.pdfPath) {
+          restoreCompiledPdf(data.pdfPath, data.timestamp ?? Date.now());
+        }
+      })
+      .catch(() => {
+        // No existing PDF is a normal state for a new project.
+      });
+
+    return () => controller.abort();
+  }, [activeProject, mainFile, compiledPdfPath, restoreCompiledPdf]);
 
   const pdfUrl = useMemo(() => {
     if (!activeProject || !compiledPdfPath) return null;
@@ -104,6 +132,15 @@ export default function PDFViewer() {
     }
   }, []);
 
+  const commitPageInput = useCallback(() => {
+    const parsed = Number.parseInt(pageInput ?? "", 10);
+    const nextPage = Number.isNaN(parsed)
+      ? currentPDFPage
+      : Math.min(Math.max(parsed, 1), totalPDFPages || 1);
+    setCurrentPDFPage(nextPage);
+    setPageInput(null);
+  }, [pageInput, currentPDFPage, totalPDFPages, setCurrentPDFPage]);
+
   // When the target page changes, mark it pending and attempt scroll
   useEffect(() => {
     if (!totalPDFPages) return;
@@ -159,17 +196,34 @@ export default function PDFViewer() {
             <ChevronLeft className="h-3.5 w-3.5 text-neutral-500" />
           </button>
           <input
-            type="number"
-            value={currentPDFPage}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={displayedPage}
+            onFocus={() => setPageInput(String(currentPDFPage))}
             onChange={(e) => {
-              const val = parseInt(e.target.value, 10);
-              if (!isNaN(val) && val >= 1) {
-                setCurrentPDFPage(Math.min(val, totalPDFPages || 1));
+              if (/^\d*$/.test(e.target.value)) setPageInput(e.target.value);
+            }}
+            onBlur={commitPageInput}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                commitPageInput();
+                e.currentTarget.blur();
+              }
+              if (e.key === "Escape") {
+                setPageInput(null);
+                e.currentTarget.blur();
               }
             }}
-            className="w-8 rounded border border-neutral-200 bg-white px-1 py-0.5 text-center text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
-            min={1}
-            max={totalPDFPages || 1}
+            aria-label="PDF page number"
+            className="min-w-10 rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-center text-xs tabular-nums text-neutral-700 outline-none focus:border-blue-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+            style={{
+              width: `${Math.max(
+                3,
+                displayedPage.length,
+                String(totalPDFPages || 1).length
+              ) + 1}ch`,
+            }}
           />
           <span className="text-xs text-neutral-400">
             / {totalPDFPages || "–"}

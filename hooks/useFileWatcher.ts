@@ -18,6 +18,13 @@ interface WatchEvent {
 
 const COMPILE_COOLDOWN_MS = 5000; // Minimum 5s between auto-compiles
 const INTERNAL_WRITE_IGNORE_MS = 2500;
+const TEXT_EXTENSIONS = new Set([
+  "tex", "bib", "sty", "cls", "bst", "tikz", "pgf", "csv", "dat", "txt", "md",
+]);
+const COMPILE_DEPENDENCY_EXTENSIONS = new Set([
+  ...TEXT_EXTENSIONS,
+  "png", "jpg", "jpeg", "gif", "svg", "eps", "pdf",
+]);
 
 export function useFileWatcher() {
   const {
@@ -32,7 +39,7 @@ export function useFileWatcher() {
   const compileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCompilingRef = useRef(false);
   const lastCompileEndRef = useRef(0);
-  const handleChangesRef = useRef<(files: FileChange[]) => void>(() => {});
+  const handleChangesRef = useRef<(files: FileChange[]) => Promise<void>>(async () => {});
 
   // Keep compiling ref in sync
   const compileStatus = useEditorStore((s) => s.compileStatus);
@@ -75,6 +82,10 @@ export function useFileWatcher() {
         pdfPath: result.pdfPath,
       });
       setPdfTimestamp(Date.now());
+      const latestState = useEditorStore.getState();
+      if (latestState.pendingExternalChanges.length === 0) {
+        latestState.setExternalChangeIndicator(null);
+      }
     } catch {
       setCompileStatus("error");
     } finally {
@@ -84,17 +95,13 @@ export function useFileWatcher() {
 
   // handleChanges reads latest state directly from store to avoid stale closures
   const handleChanges = useCallback(
-    (files: FileChange[]) => {
+    async (files: FileChange[]) => {
       const state = useEditorStore.getState();
       if (!state.activeProject) return;
 
-      const textExts = new Set([
-        "tex", "bib", "sty", "cls", "bst", "tikz", "pgf", "csv", "dat", "txt", "md",
-      ]);
-      const compileExts = new Set(["tex", "bib", "sty", "cls", "bst"]);
-
-      const openPaths = new Set(state.openFiles.map((f) => f.path));
+      const openFiles = new Map(state.openFiles.map((file) => [file.path, file]));
       const pendingReloadFiles: Array<{ path: string; name: string }> = [];
+      const relevantChanges: FileChange[] = [];
       let hasRealTexChanges = false;
       const now = Date.now();
 
@@ -105,13 +112,29 @@ export function useFileWatcher() {
         }
 
         const ext = file.name.split(".").pop()?.toLowerCase() || "";
+        const openFile = openFiles.get(file.path);
 
-        if (openPaths.has(file.path) && textExts.has(ext)) {
+        if (openFile && TEXT_EXTENSIONS.has(ext)) {
+          if (!openFile.unsaved && file.event !== "rename") {
+            try {
+              const res = await fetch(`/api/files?path=${encodeURIComponent(file.path)}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data.content === useEditorStore.getState().fileContent[file.path]) {
+                  continue;
+                }
+              }
+            } catch {
+              // If verification fails, preserve the external-change warning.
+            }
+          }
+
           pendingReloadFiles.push({ path: file.path, name: file.name });
-          if (compileExts.has(ext)) hasRealTexChanges = true;
-        } else if (compileExts.has(ext)) {
-          // File not open — assume genuine change
+          relevantChanges.push(file);
+          if (COMPILE_DEPENDENCY_EXTENSIONS.has(ext)) hasRealTexChanges = true;
+        } else if (COMPILE_DEPENDENCY_EXTENSIONS.has(ext)) {
           hasRealTexChanges = true;
+          relevantChanges.push(file);
         }
       }
 
@@ -122,8 +145,9 @@ export function useFileWatcher() {
       if (pendingReloadFiles.length === 0 && !hasRealTexChanges) return;
 
       // Show indicator
-      const changedNames = files.map((f) => f.name).slice(0, 3);
-      const suffix = files.length > 3 ? ` +${files.length - 3} weitere` : "";
+      const changedNames = relevantChanges.map((f) => f.name).slice(0, 3);
+      const suffix =
+        relevantChanges.length > 3 ? ` +${relevantChanges.length - 3} weitere` : "";
       setExternalChangeIndicator(`${changedNames.join(", ")}${suffix}`);
 
       // Debounced recompile (3s after last change) — only if actual content changed

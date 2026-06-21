@@ -57,7 +57,7 @@ Images are built by GitHub Actions and pushed to this repository's GitHub Contai
 ghcr.io/wiesty/latex-editor
 ```
 
-The workflow uses `GITHUB_TOKEN` with `packages: write` and OCI source labels so GHCR links the package back to this repository. If GHCR rejects the built-in token with `write_package`, add a repository secret named `GHCR_TOKEN` with `read:packages` and `write:packages` scopes. Pull requests build the image without publishing; pushes to `main`, version tags, and manual workflow runs publish it.
+The workflow runs only when manually started from the GitHub Actions tab. It uses `GITHUB_TOKEN` with `packages: write` and OCI source labels so GHCR links the package back to this repository. If GHCR rejects the built-in token with `write_package`, add a repository secret named `GHCR_TOKEN` with `read:packages` and `write:packages` scopes.
 
 ---
 
